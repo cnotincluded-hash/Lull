@@ -1,0 +1,64 @@
+name: Build desktop installers
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            script: dist:win
+            files: desktop/dist/*.exe
+          - os: macos-latest
+            script: dist:mac
+            files: desktop/dist/*.dmg
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+      - run: npm ci
+      - name: Build installer
+        run: npm run ${{ matrix.script }}
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lull-${{ runner.os }}
+          path: ${{ matrix.files }}
+          if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || format('desktop-build-{0}', github.run_number) }}
+          name: ${{ github.ref_type == 'tag' && format('Lull {0}', github.ref_name) || format('Lull desktop build {0}', github.run_number) }}
+          body: |
+            Lull for Windows and Mac.
+
+            **Windows:** run `Lull-…-setup.exe`. Windows SmartScreen may say "Windows protected your PC" because the app isn't signed: click **More info**, then **Run anyway**.
+
+            **Mac:** open the `.dmg` and drag Lull to Applications. The first time, right-click Lull in Applications and choose **Open**, then **Open** again (it isn't notarised by Apple). Needs macOS 12 or newer.
+          files: out/*

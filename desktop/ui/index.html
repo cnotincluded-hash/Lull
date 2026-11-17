@@ -1,0 +1,1196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src * data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; font-src 'self'">
+<title>Lull</title>
+<style>
+@font-face{font-family:'Onest';font-weight:400;src:url(fonts/onest-latin-400-normal.woff2) format('woff2')}
+@font-face{font-family:'Onest';font-weight:500;src:url(fonts/onest-latin-500-normal.woff2) format('woff2')}
+@font-face{font-family:'Onest';font-weight:600;src:url(fonts/onest-latin-600-normal.woff2) format('woff2')}
+:root{
+  /* Layout: sidebar on the left (pinned, minimised to a rail, or hidden until you point at the edge); pages live in native views to the right */
+  --bg:#F3F3F1; --surface:#FFFFFF; --ink:#1B1C20; --muted:#686A73; --line:rgba(24,26,34,.10); --hover:rgba(24,26,34,.06);
+  --shadow:0 10px 36px rgba(20,22,30,.16); --ui:'Onest',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+  --accent:#3D7A80; --tint:#E3EBEB; --sbw:280px; --dock:280px; color-scheme:light;
+}
+html.dark{--bg:#121316; --surface:#1C1D22; --ink:#ECECEF; --muted:#A0A2AC; --line:rgba(255,255,255,.10); --hover:rgba(255,255,255,.07); --shadow:0 10px 36px rgba(0,0,0,.55); color-scheme:dark}
+html.priv{--bg:#17141F; --surface:#241F31; --ink:#EDEBF3; --muted:#AAA4BB; --line:rgba(255,255,255,.10); --hover:rgba(255,255,255,.07); --shadow:0 10px 36px rgba(0,0,0,.55); color-scheme:dark}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;background:transparent;overflow:hidden}
+body{font-family:var(--ui);font-size:14px;color:var(--ink);-webkit-font-smoothing:antialiased;user-select:none}
+button{font:inherit;color:inherit;cursor:default}
+button:disabled{opacity:.35}
+input{font:inherit;color:inherit;user-select:text}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.ic{display:block;flex:none}
+.muted{color:var(--muted)}
+.drag{-webkit-app-region:drag}
+.drag button,.drag input{-webkit-app-region:no-drag}
+.ib{border:0;background:none;border-radius:9px;width:32px;height:32px;display:grid;place-items:center;padding:0;color:var(--ink);flex:none;position:relative}
+.ib:hover{background:var(--hover)}
+.ib.on{color:var(--accent);background:color-mix(in srgb,var(--accent) 14%,transparent)}
+.btn{border:1px solid var(--line);background:var(--surface);border-radius:11px;padding:8px 14px;font-weight:500;color:var(--ink)}
+.btn:hover{background:color-mix(in srgb,var(--surface) 88%,var(--ink))}
+.btn.pri{background:var(--accent);border-color:transparent;color:#fff}
+.btn.sm{padding:5px 10px;font-size:13px;border-radius:9px}
+.btn.danger{color:#C2413A}
+.fav{display:grid;place-items:center;color:#fff;font-weight:600;flex:none;line-height:1;overflow:hidden}
+.fav img{width:100%;height:100%;object-fit:contain;display:block}
+.fav.img{background:#fff;border:1px solid var(--line)}
+.fav-lull{background:color-mix(in srgb,var(--accent) 16%,var(--surface));color:var(--accent)}
+
+/* ---------- sidebar ---------- */
+#app{position:absolute;inset:0}
+#sb{position:absolute;left:0;top:0;bottom:0;width:var(--sbw);display:none;flex-direction:column;gap:10px;padding:10px 8px 10px 10px;background:var(--tint)}
+.m-pinned #sb{display:flex}
+.peek #sb{display:flex;left:8px;top:8px;bottom:8px;border-radius:16px;box-shadow:var(--shadow);border:1px solid var(--line);padding:10px;z-index:30;animation:slide .16s ease-out}
+@keyframes slide{from{transform:translateX(-14px);opacity:.4}}
+.sb-top{display:flex;align-items:center;gap:2px;min-height:34px}
+.mac .sb-top{padding-left:70px}
+.sb-top .sp{flex:1;align-self:stretch}
+.addr{display:flex;align-items:center;gap:2px;height:40px;border-radius:12px;background:var(--surface);border:1px solid var(--line);padding:0 4px}
+.addr .txt{flex:1;min-width:0;border:0;background:none;height:100%;text-align:left;padding:0 6px;display:flex;align-items:center;gap:6px;cursor:text}
+.addr .txt span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.addr .txt.ph{color:var(--muted)}
+.addr .shield{color:var(--accent)}
+.addr .shield.off{color:var(--muted)}
+.badge{position:absolute;top:-1px;right:-3px;min-width:16px;height:16px;border-radius:8px;padding:0 4px;background:var(--accent);color:#fff;font-size:10px;font-weight:600;line-height:16px;text-align:center;font-variant-numeric:tabular-nums}
+.zoomb{font-size:11.5px;border:1px solid var(--line);border-radius:7px;padding:2px 6px;background:none;color:var(--muted)}
+.prog{height:2px;border-radius:1px;background:var(--accent);margin:-8px 8px 0;opacity:0;transition:opacity .3s}
+.prog.on{opacity:1;animation:pulse 1.1s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:.35}50%{opacity:1}}
+.favs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+.favs .tile{height:44px;border:1px solid var(--line);border-radius:12px;background:color-mix(in srgb,var(--surface) 65%,transparent);display:grid;place-items:center;padding:0}
+.favs .tile:hover{background:var(--surface)}
+.favs .tile.on{background:var(--surface);border-color:color-mix(in srgb,var(--accent) 45%,transparent)}
+.favs.drop{outline:2px dashed var(--accent);outline-offset:3px;border-radius:12px}
+.newtab{display:flex;align-items:center;gap:10px;border:0;background:none;padding:7px 8px;border-radius:10px;color:var(--muted);text-align:left}
+.newtab:hover{background:var(--hover);color:var(--ink)}
+.tabs{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:2px;margin-top:-6px}
+.trow{display:flex;align-items:center;border-radius:11px;position:relative}
+.trow:hover{background:var(--hover)}
+.trow.on{background:var(--surface);box-shadow:0 1px 6px rgba(20,22,30,.08)}
+.trow.drag-over{box-shadow:inset 0 2px 0 var(--accent)}
+.trow-main{flex:1;min-width:0;display:flex;align-items:center;gap:10px;border:0;background:none;padding:7px 6px 7px 8px;text-align:left}
+.trow-main span.t{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.trow .x{opacity:0;width:26px;height:26px;margin-right:4px;color:var(--muted)}
+.trow:hover .x,.trow.on .x{opacity:1}
+.trow .aud{width:24px;height:24px;color:var(--accent)}
+.now{border-radius:14px;background:var(--surface);border:1px solid var(--line);padding:8px 8px 8px 10px;display:flex;align-items:center;gap:8px}
+.now .meta{flex:1;min-width:0;border:0;background:none;padding:0;text-align:left;display:flex;flex-direction:column}
+.now .meta b{font-weight:500;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.now .meta small{font-size:11.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.now .eq{display:inline-flex;gap:2px;align-items:flex-end;height:11px;color:var(--accent);margin-right:4px}
+.now .eq i{width:2.5px;background:currentColor;border-radius:1px;animation:eq .9s infinite ease-in-out}
+.now .eq i:nth-child(2){animation-delay:-.3s}.now .eq i:nth-child(3){animation-delay:-.6s}
+@keyframes eq{0%,100%{height:3px}50%{height:11px}}
+.sb-foot{display:flex;align-items:center;gap:2px}
+.sb-foot .sp{flex:1}
+.space{height:32px;min-width:34px;border-radius:10px;border:1px solid transparent;background:none;display:flex;align-items:center;justify-content:center;gap:6px;padding:0 8px;color:var(--muted);font-size:13px}
+.space:hover{background:var(--hover)}
+.space.on{background:var(--surface);border-color:var(--line);color:var(--c)}
+.space.on span{color:var(--ink)}
+.space:not(.on) span{display:none}
+.resize{position:absolute;top:0;bottom:0;right:-3px;width:8px;cursor:col-resize;z-index:5}
+.m-pinned.peek .resize,.peek .resize{display:none}
+
+/* rail (minimised sidebar) */
+#rail{position:absolute;left:0;top:0;bottom:0;width:72px;display:none;flex-direction:column;align-items:center;gap:6px;padding:10px 0;background:var(--tint)}
+.m-rail #rail{display:flex}
+.mac #rail{padding-top:42px}
+#rail .rt{width:44px;height:40px;border-radius:12px;border:1px solid transparent;background:none;display:grid;place-items:center;position:relative;padding:0}
+#rail .rt:hover{background:var(--hover)}
+#rail .rt.on{background:var(--surface);border-color:var(--line)}
+#rail .dot{position:absolute;right:3px;top:3px;width:8px;height:8px;border-radius:50%;background:var(--accent);border:2px solid var(--tint)}
+#rail .sep{width:28px;height:1px;background:var(--line);margin:2px 0}
+#rail .list{display:flex;flex-direction:column;align-items:center;gap:4px;overflow-y:auto;min-height:0;flex:0 1 auto}
+#rail .sp{flex:1}
+#edge{position:absolute;left:0;top:0;bottom:0;width:6px;display:none}
+.m-hidden #edge{display:block}
+
+/* content area (Lull's own pages) */
+#content{position:absolute;top:8px;right:8px;bottom:8px;left:var(--dock);border-radius:10px;background:var(--bg);overflow-y:auto;display:none;box-shadow:0 1px 10px rgba(20,22,30,.08)}
+.nodock #content{inset:0;border-radius:0;box-shadow:none}
+.screen #content{display:block}
+
+/* overlays */
+#scrim{position:absolute;inset:0;z-index:40;display:none}
+#scrim.on{display:block}
+#scrim.dim{background:rgba(10,11,14,.38)}
+.pop{position:absolute;z-index:50;background:var(--surface);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow);padding:14px;width:330px;max-height:calc(100% - 24px);overflow-y:auto;display:none}
+.pop.on{display:block;animation:pop .14s ease-out}
+@keyframes pop{from{transform:scale(.97);opacity:0}}
+.pop h3,.modal h3{display:flex;align-items:center;gap:10px;font-size:17px;font-weight:600;margin:2px 0 10px;min-width:0}
+.pop h3 span,.modal h3 span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sec{font-size:11.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:18px 0 6px}
+.big{font-size:32px;font-weight:600;margin:0;color:var(--accent);letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.big small{font-size:13.5px;color:var(--muted);font-weight:500;letter-spacing:0;margin-left:6px}
+.row{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--line)}
+.row:last-child{border-bottom:0}
+.row>div{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.row b{font-weight:500}
+.row small{color:var(--muted);font-size:12.5px;line-height:1.4}
+.sw{width:40px;height:24px;border-radius:12px;border:0;background:color-mix(in srgb,var(--ink) 20%,transparent);position:relative;flex:none;padding:0;transition:background .15s}
+.sw i{position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.25);transition:transform .15s}
+.sw.on{background:var(--accent)}
+.sw.on i{transform:translateX(16px)}
+.grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.tile2{border:1px solid var(--line);background:none;border-radius:15px;padding:11px 4px 9px;display:flex;flex-direction:column;align-items:center;gap:6px;font-size:12.5px;text-align:center}
+.tile2:hover{background:var(--hover)}
+.tile2 .ic{color:var(--accent)}
+.tile2 small{font-size:11px;color:var(--muted)}
+.tile2.on{background:color-mix(in srgb,var(--accent) 12%,transparent);border-color:color-mix(in srgb,var(--accent) 35%,transparent)}
+.zrow{display:flex;align-items:center;gap:6px;margin-top:10px;padding:8px 10px;border-radius:12px;background:var(--hover)}
+.zrow span{flex:1}
+.stop{display:flex;align-items:center;gap:8px;padding:7px 9px;border-radius:10px;background:var(--hover);font-size:13px;margin-top:4px}
+.stop span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.menuitem{display:flex;align-items:center;gap:10px;width:100%;border:0;background:none;padding:8px 10px;border-radius:9px;text-align:left}
+.menuitem:hover{background:var(--hover)}
+
+#cmd{position:absolute;z-index:50;left:50%;top:12vh;transform:translateX(-50%);width:min(660px,calc(100% - 40px));background:var(--surface);border:1px solid var(--line);border-radius:20px;box-shadow:var(--shadow);display:none;overflow:hidden}
+#cmd.on{display:block;animation:pop .14s ease-out}
+.cmd-in{display:flex;align-items:center;gap:10px;padding:0 16px;height:56px;border-bottom:1px solid var(--line)}
+.cmd-in input{flex:1;border:0;outline:none;background:none;font-size:17px}
+.cmd-list{max-height:min(420px,60vh);overflow-y:auto;padding:6px}
+.sg{display:flex;align-items:center;gap:12px;width:100%;border:0;background:none;padding:9px 10px;border-radius:11px;text-align:left}
+.sg.sel,.sg:hover{background:var(--hover)}
+.sg span{min-width:0;display:flex;flex-direction:column;flex:1}
+.sg b{font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sg small{color:var(--muted);font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sg .tag{font-size:11.5px;color:var(--muted);border:1px solid var(--line);border-radius:6px;padding:1px 6px}
+.sg-h{font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:10px 10px 4px}
+
+.modal{position:absolute;z-index:50;left:50%;top:50%;transform:translate(-50%,-50%);width:min(580px,calc(100% - 40px));max-height:calc(100% - 60px);overflow-y:auto;background:var(--surface);border:1px solid var(--line);border-radius:22px;box-shadow:var(--shadow);padding:20px 22px;display:none}
+.modal.on{display:block;animation:pop .14s ease-out}
+.modal.wide{width:min(760px,calc(100% - 40px))}
+.mhead{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+.mhead h3{margin:0}
+.field{width:100%;border:1px solid var(--line);background:var(--bg);border-radius:11px;padding:9px 11px;font-size:14.5px;outline:none}
+.field:focus{border-color:var(--accent)}
+.flabel{display:block;font-size:12.5px;color:var(--muted);margin:12px 0 5px}
+.opt{display:flex;align-items:center;gap:10px;width:100%;border:0;background:none;padding:8px 2px;text-align:left}
+.opt i{width:18px;height:18px;border-radius:50%;border:2px solid var(--line);flex:none}
+.opt.on i{border:6px solid var(--accent)}
+.seg{display:flex;background:var(--hover);border-radius:11px;padding:3px;gap:2px}
+.seg button{flex:1;border:0;background:none;border-radius:9px;padding:6px 8px;color:var(--muted)}
+.seg button.on{background:var(--surface);color:var(--ink);box-shadow:0 1px 4px rgba(0,0,0,.08)}
+.btnrow{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+.lim{padding:10px 0;border-bottom:1px solid var(--line);display:grid;gap:7px}
+.lim-top{display:flex;align-items:center;gap:10px}
+.lim-top b{font-weight:500;flex:1}
+.lim-bar{height:5px;border-radius:3px;background:var(--hover);overflow:hidden}
+.lim-bar i{display:block;height:100%;background:var(--accent)}
+.help-sec{border:1px solid var(--line);border-radius:16px;padding:14px 16px;margin-bottom:10px}
+.help-sec h4{display:flex;align-items:center;gap:10px;margin:0 0 6px;font-size:15.5px;font-weight:600}
+.help-sec h4 .n{width:24px;height:24px;border-radius:8px;background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent);display:grid;place-items:center;font-size:12.5px;flex:none}
+.help-sec p,.help-sec li{font-size:14px;line-height:1.55;margin:0 0 6px;user-select:text}
+.help-sec ol,.help-sec ul{margin:0;padding-left:20px}
+.help-sec .ic{display:inline-block;vertical-align:-3px;color:var(--accent)}
+.kbd{display:inline-block;font-size:12px;border:1px solid var(--line);border-bottom-width:2px;border-radius:6px;padding:0 6px;background:var(--bg);white-space:nowrap}
+.keys{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;font-size:13.5px}
+
+#glance{position:absolute;z-index:45;left:50%;top:40px;bottom:40px;transform:translateX(-50%);width:min(980px,calc(100% - 80px));display:none;flex-direction:column;background:var(--surface);border-radius:18px;box-shadow:0 30px 80px rgba(0,0,0,.4);border:1px solid var(--line)}
+#glance.on{display:flex}
+.gl-head{display:flex;align-items:center;gap:8px;padding:8px 8px 8px 14px;height:54px;flex:none}
+.gl-head .t{flex:1;min-width:0;display:flex;flex-direction:column}
+.gl-head b{font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gl-head small{font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gl-body{flex:1;margin:0 6px 6px;border-radius:14px;background:var(--bg);display:grid;place-items:center;color:var(--muted)}
+
+#stack{position:absolute;z-index:35;left:12px;bottom:12px;width:316px;display:flex;flex-direction:column;gap:8px}
+.m-pinned:not(.peek) #stack{width:calc(var(--sbw) - 22px);bottom:58px}
+.toast{background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:9px 8px 9px 12px;display:flex;align-items:center;gap:8px;animation:pop .14s ease-out}
+.toast .tt{flex:1;min-width:0;font-size:13px;line-height:1.35}
+.toast .tt b{font-weight:600;display:block}
+.toast .tt small{color:var(--muted);display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.toast>.ic{color:var(--accent)}
+.findbar{background:var(--surface);border:1px solid var(--accent);border-radius:14px;box-shadow:var(--shadow);padding:4px 4px 4px 10px;display:flex;align-items:center;gap:4px}
+.findbar input{flex:1;min-width:0;border:0;outline:none;background:none;height:32px}
+.findbar .cnt{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+
+/* new tab page and paused page */
+.start{min-height:100%;display:flex;flex-direction:column;align-items:center;padding:11vh 24px 24px;text-align:center}
+.clock{font-size:76px;font-weight:300;letter-spacing:-.03em;line-height:1;font-variant-numeric:tabular-nums}
+.date{color:var(--muted);margin:10px 0 28px;font-size:15px}
+.search{width:100%;max-width:560px;height:54px;border-radius:18px;border:1px solid var(--line);background:var(--surface);display:flex;align-items:center;gap:10px;padding:0 16px;color:var(--muted);box-shadow:0 2px 12px rgba(0,0,0,.04)}
+.search input{flex:1;border:0;outline:none;background:none;font-size:16px;color:var(--ink)}
+.bigfavs{display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:22px 12px;margin-top:36px;width:100%;max-width:640px}
+.bigfavs button{border:0;background:none;display:flex;flex-direction:column;align-items:center;gap:8px;font-size:13px;padding:6px 0;border-radius:14px;min-width:0}
+.bigfavs button:hover{background:var(--hover)}
+.bigfavs button span{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bigfavs .fav{border-radius:17px;box-shadow:0 3px 10px rgba(0,0,0,.08)}
+.bigfavs .add .fav{background:none;border:1.5px dashed color-mix(in srgb,var(--ink) 25%,transparent);color:var(--muted);box-shadow:none}
+.tip{font-size:13px;color:var(--muted);margin:16px 0 0}
+.foot{margin-top:auto;padding-top:36px;display:flex;flex-direction:column;align-items:center;gap:10px}
+.link{border:0;background:none;color:var(--accent);display:flex;align-items:center;gap:6px;padding:4px}
+.privcard{max-width:560px;width:100%;text-align:left;border-radius:18px;padding:14px 16px;margin-bottom:22px;background:color-mix(in srgb,var(--accent) 14%,transparent);border:1px solid color-mix(in srgb,var(--accent) 30%,transparent);line-height:1.5}
+.privcard b{display:flex;align-items:center;gap:8px;font-size:15.5px;margin-bottom:4px}
+.paused{min-height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:30px;gap:12px}
+.paused h2{font-size:26px;font-weight:600;margin:6px 0 0}
+.paused p{color:var(--muted);max-width:360px;line-height:1.5;margin:0}
+.paused .fav{filter:grayscale(1);opacity:.6}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div id="app" class="m-pinned screen">
+  <aside id="sb" aria-label="Tabs and spaces"></aside>
+  <nav id="rail" aria-label="Tabs"></nav>
+  <div id="edge" aria-hidden="true"></div>
+  <main id="content"></main>
+  <div id="scrim"></div>
+  <section id="pop" class="pop" role="dialog"></section>
+  <section id="cmd" role="dialog" aria-label="Search or type a web address"></section>
+  <section id="modal" class="modal" role="dialog" aria-modal="true"></section>
+  <section id="glance" role="dialog" aria-label="Glance"></section>
+  <div id="stack" aria-live="polite"></div>
+</div>
+<script>
+(function () {
+'use strict';
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const L = window.lull || { platform: 'linux', send() {}, invoke: async () => null, on() {} };
+const send = (c, ...a) => L.send('lull:' + c, ...a);
+const PRIV = /private=1/.test(location.search);
+const MAC = L.platform === 'darwin';
+const MOD = MAC ? '⌘' : 'Ctrl';
+document.documentElement.classList.toggle('mac', MAC);
+document.body.classList.toggle('mac', MAC);
+
+/* ---------- icons ---------- */
+const I = {
+  shield: 'M12 3.5l7 2.8v4.9c0 4.3-2.9 7.9-7 9.6-4.1-1.7-7-5.3-7-9.6V6.3z',
+  shieldOff: 'M12 3.5l7 2.8v4.9c0 4.3-2.9 7.9-7 9.6-4.1-1.7-7-5.3-7-9.6V6.3zM4.5 4.5l15 15',
+  reader: 'M6 6.5h12M6 10.5h12M6 14.5h8M6 18.5h10',
+  dots: 'M6 12h.01M12 12h.01M18 12h.01',
+  plus: 'M12 5v14M5 12h14', x: 'M7 7l10 10M17 7L7 17', back: 'M14.5 6l-6 6 6 6', fwd: 'M9.5 6l6 6-6 6',
+  reload: 'M18.5 12a6.5 6.5 0 1 1-1.9-4.6M18 4.5V8h-3.5', stop: 'M7 7l10 10M17 7L7 17',
+  search: 'M11 5a6 6 0 1 1 0 12 6 6 0 0 1 0-12zM19.5 19.5l-4.2-4.2',
+  globe: 'M12 4a8 8 0 1 1 0 16 8 8 0 0 1 0-16zM4 12h16M12 4c2.2 2.3 3.2 5 3.2 8s-1 5.7-3.2 8c-2.2-2.3-3.2-5-3.2-8s1-5.7 3.2-8z',
+  pin: 'M9 4h6l-1 6 3 3H7l3-3zM12 13v7',
+  unpin: 'M9 4h6l-1 6 3 3H7l3-3zM12 13v7M4 4l16 16',
+  rail: 'M4 5h16v14H4zM9.5 5v14', expand: 'M4 5h16v14H4zM14.5 5v14',
+  star: 'M12 4.5l2.3 4.7 5.2.8-3.8 3.6.9 5.1-4.6-2.4-4.6 2.4.9-5.1L4.5 10l5.2-.8z',
+  focus: 'M12 4.5a7.5 7.5 0 1 1 0 15 7.5 7.5 0 0 1 0-15zM12 9.2a2.8 2.8 0 1 1 0 5.6 2.8 2.8 0 0 1 0-5.6z',
+  gear: 'M12 9a3 3 0 1 1 0 6 3 3 0 0 1 0-6zM12 3.5v2.2M12 18.3v2.2M3.5 12h2.2M18.3 12h2.2M6 6l1.6 1.6M16.4 16.4L18 18M6 18l1.6-1.6M16.4 7.6L18 6',
+  help: 'M12 4a8 8 0 1 1 0 16 8 8 0 0 1 0-16zM9.8 9.6a2.3 2.3 0 1 1 3.2 2.1c-.7.3-1 .8-1 1.5v.3M12 16.4v.1',
+  mask: 'M3.5 9.5c0-1.4 1.1-2.5 2.5-2.5h12c1.4 0 2.5 1.1 2.5 2.5v1.2c0 3-2.2 5.3-4.6 5.3-1.6 0-2.4-1-3.9-1s-2.3 1-3.9 1c-2.4 0-4.6-2.3-4.6-5.3zM8.3 10v1.5M15.7 10v1.5',
+  speaker: 'M5 9.5h3l4-3.5v12l-4-3.5H5zM15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11',
+  muted: 'M5 9.5h3l4-3.5v12l-4-3.5H5zM16 9.5l5 5M21 9.5l-5 5',
+  play: 'M8 5.5v13l10-6.5z', pause: 'M8 5.5v13M16 5.5v13',
+  popout: 'M4 6h16v12H4zM12.5 12h6v5h-6z',
+  copy: 'M8 8h11v11H8zM5 15.5v-9A1.5 1.5 0 0 1 6.5 5h9',
+  find: 'M11 5a6 6 0 1 1 0 12 6 6 0 0 1 0-12zM19.5 19.5l-4.2-4.2M8.5 11h5',
+  up: 'M6 15l6-6 6 6', down: 'M6 9l6 6 6-6',
+  redirect: 'M4 17V11a4 4 0 0 1 4-4h11M15 3.5L19 7l-4 3.5',
+  popup: 'M3.5 5h17v14h-17zM3.5 9h17M9.5 12.5l5 5M14.5 12.5l-5 5',
+  dl: 'M12 4v11M7.5 10.5L12 15l4.5-4.5M5 19h14',
+  open: 'M14 5h5v5M19 5l-8 8M17 13.5V19H5V7h5.5',
+  personal: 'M12 5.5a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13z',
+  dev: 'M9 7.5L4.5 12 9 16.5M15 7.5l4.5 4.5-4.5 4.5',
+  reading: 'M4.5 6.2c3-1 5.5-.6 7.5 1 2-1.6 4.5-2 7.5-1v11.6c-3-1-5.5-.6-7.5 1-2-1.6-4.5-2-7.5-1zM12 7.2v11.6',
+  private: 'M3.5 9.5c0-1.4 1.1-2.5 2.5-2.5h12c1.4 0 2.5 1.1 2.5 2.5v1.2c0 3-2.2 5.3-4.6 5.3-1.6 0-2.4-1-3.9-1s-2.3 1-3.9 1c-2.4 0-4.6-2.3-4.6-5.3z'
+};
+const ic = (n, s = 18, sw = 1.7) => `<svg class="ic" width="${s}" height="${s}" viewBox="0 0 24 24" fill="${n === 'play' ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="${n === 'dots' ? 2.8 : sw}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${I[n]}"/></svg>`;
+const logo = (s) => `<svg class="ic" width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M4.2 13.4h15.6a8 8 0 0 1-15.6 0z" fill="currentColor"/></svg>`;
+
+/* ---------- constants ---------- */
+const WS = PRIV ? [{ id: 'private', name: 'Private', icon: 'mask', light: '#A994FF', dark: '#A994FF' }] : [
+  { id: 'personal', name: 'Personal', icon: 'personal', light: '#3D7A80', dark: '#7DBDC3' },
+  { id: 'dev', name: 'Dev', icon: 'dev', light: '#6A55C6', dark: '#AC9CF2' },
+  { id: 'reading', name: 'Reading', icon: 'reading', light: '#A0652A', dark: '#E2A86C' }];
+const ENGINES = { ddg: ['DuckDuckGo', 'https://duckduckgo.com/?q='], google: ['Google', 'https://www.google.com/search?q='], bing: ['Bing', 'https://www.bing.com/search?q='], brave: ['Brave Search', 'https://search.brave.com/search?q='], ecosia: ['Ecosia', 'https://www.ecosia.org/search?q='], startpage: ['Startpage', 'https://www.startpage.com/do/search?q='] };
+const START = 'lull:start';
+const TILE = ['#3D7A80', '#6A55C6', '#A0652A', '#4E6E9E', '#8A4F7D', '#4F7F52', '#9A5B4E', '#5C6670'];
+
+/* ---------- state ---------- */
+function defaults() {
+  return {
+    v: 1, activeWs: 'personal',
+    tabs: [{ id: 't1', ws: 'personal', url: START, title: 'New tab' }, { id: 't2', ws: 'dev', url: START, title: 'New tab' }, { id: 't3', ws: 'reading', url: START, title: 'New tab' }],
+    active: { personal: 't1', dev: 't2', reading: 't3' },
+    favs: [{ url: 'https://www.wikipedia.org', name: 'Wikipedia' }, { url: 'https://github.com', name: 'GitHub' }, { url: 'https://itch.io', name: 'itch.io' }, { url: 'https://dev.epicgames.com/documentation/en-us/unreal-engine', name: 'Unreal Docs' }],
+    icons: {}, hist: [], closed: [], theme: 'system', engine: 'ddg',
+    block: { ads: true, cookies: true, autoplay: true, popups: true, redirects: true, youtube: true }, allow: [],
+    autoPip: true, updateLists: true, sidebar: { pinned: true, mini: false, width: 280 },
+    limits: [], usage: { day: '', secs: {} }, session: 0, readerSize: 19, week: { k: 0, n: 0 }, seenHelp: false
+  };
+}
+let S = defaults();
+let saveT = null;
+function save() { if (PRIV) return; clearTimeout(saveT); saveT = setTimeout(() => send('save', JSON.stringify(S)), 300); }
+const eph = {};
+const E = (id) => eph[id] || (eph[id] = { canBack: false, canFwd: false, loading: false, blocked: 0, reader: false, paused: null, stops: [], zoom: 100, failed: null });
+const media = {}; // tab id -> { playing, audible, muted, title, url, at }
+const curWs = () => WS.find((w) => w.id === S.activeWs) || WS[0];
+const wsTabs = (ws) => S.tabs.filter((t) => t.ws === (ws || S.activeWs));
+let seq = Date.now();
+function mkTab(url, ws, at) {
+  const t = { id: 't' + (seq++).toString(36), ws: ws || S.activeWs, url: url || START, title: url ? '' : 'New tab' };
+  if (at != null) S.tabs.splice(at, 0, t); else S.tabs.push(t);
+  return t;
+}
+function cur() {
+  let t = S.tabs.find((x) => x.id === S.active[S.activeWs] && x.ws === S.activeWs);
+  if (!t) { t = wsTabs()[0] || mkTab(START); S.active[S.activeWs] = t.id; }
+  return t;
+}
+
+/* ---------- urls ---------- */
+const hostOf = (u) => { try { return /^https?:/i.test(u) ? new URL(u).hostname.toLowerCase() : ''; } catch (e) { return ''; } };
+const bare = (h) => (h || '').replace(/^www\./, '');
+function toUrl(q) {
+  q = q.trim();
+  if (!q) return '';
+  if (/^(https?|file|about|data):/i.test(q)) return q;
+  if (/^[^\s/]+\.[a-z]{2,}(:\d+)?(\/\S*)?$/i.test(q) || /^localhost(:\d+)?(\/\S*)?$/i.test(q) || /^\d+\.\d+\.\d+\.\d+(:\d+)?(\/\S*)?$/.test(q)) return (/^localhost|^\d/.test(q) ? 'http://' : 'https://') + q;
+  return (ENGINES[S.engine] || ENGINES.ddg)[1] + encodeURIComponent(q);
+}
+function searchQuery(u) {
+  for (const k in ENGINES) { const p = ENGINES[k][1]; if (u.startsWith(p)) { try { return decodeURIComponent(u.slice(p.length).split('&')[0].replace(/\+/g, ' ')); } catch (e) { return null; } } }
+  return null;
+}
+function titleOf(t) { if (t.url === START) return 'New tab'; const q = searchQuery(t.url); if (q != null && !t.title) return q; return t.title || bare(hostOf(t.url)) || t.url; }
+function hashCol(h) { let x = 0; for (const c of h) x = (x * 31 + c.charCodeAt(0)) | 0; return TILE[Math.abs(x) % TILE.length]; }
+function fav(url, sz, label) {
+  sz = sz || 20;
+  const r = Math.round(sz * 0.3);
+  if (url === START) return `<span class="fav fav-lull" style="width:${sz}px;height:${sz}px;border-radius:${r}px">${logo(Math.round(sz * 0.72))}</span>`;
+  const h = bare(hostOf(url));
+  const im = S.icons[h];
+  if (im) return `<span class="fav img" style="width:${sz}px;height:${sz}px;border-radius:${r}px;padding:${Math.round(sz * 0.12)}px"><img src="${esc(im)}" alt="" onerror="this.parentNode.style.background='${hashCol(h)}';this.remove()"></span>`;
+  const letter = ((label || h || '?').replace(/^www\./, '')[0] || '?').toUpperCase();
+  return `<span class="fav" style="width:${sz}px;height:${sz}px;border-radius:${r}px;background:${hashCol(h || label || '')};font-size:${Math.round(sz * 0.48)}px">${esc(letter)}</span>`;
+}
+
+/* ---------- theme ---------- */
+const mq = matchMedia('(prefers-color-scheme: dark)');
+const isDark = () => PRIV || S.theme === 'dark' || (S.theme === 'system' && mq.matches);
+function mix(a, b, t) {
+  const p = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+  const x = p(a), y = p(b);
+  return '#' + x.map((v, i) => Math.round(v * t + y[i] * (1 - t)).toString(16).padStart(2, '0')).join('');
+}
+function applyTheme() {
+  const d = isDark();
+  const root = document.documentElement;
+  root.classList.toggle('dark', d && !PRIV);
+  root.classList.toggle('priv', PRIV);
+  const w = curWs();
+  const accent = d ? w.dark : w.light;
+  const bg = PRIV ? '#17141F' : d ? '#121316' : '#F3F3F1';
+  const tint = mix(accent, bg, PRIV ? 0.12 : d ? 0.1 : 0.14);
+  root.style.setProperty('--accent', accent);
+  root.style.setProperty('--tint', tint);
+  send('theme', { bg: tint, source: PRIV ? undefined : S.theme });
+}
+mq.addEventListener('change', () => { applyTheme(); renderAll(); });
+
+/* ---------- focus limits ---------- */
+const today = () => { const d = new Date(); return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate(); };
+const weekKey = () => Math.floor((Date.now() / 864e5 + 3) / 7);
+function usage() { if (S.usage.day !== today()) S.usage = { day: today(), secs: {} }; return S.usage.secs; }
+function limitFor(h) { h = bare(h); if (!h) return null; return S.limits.find((l) => h === l.host || h.endsWith('.' + l.host)) || null; }
+const sessionLeft = () => Math.max(0, (S.session || 0) - Date.now());
+function focusBlocked(url) { const l = limitFor(hostOf(url)); if (!l) return null; if (sessionLeft() > 0) return 'session'; if ((usage()[l.host] || 0) >= l.min * 60) return 'limit'; return null; }
+const fmt = (ms) => { const s = Math.ceil(ms / 1000); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); };
+
+/* ---------- layout ---------- */
+let peek = false, peekT = null, popKind = null, cmdOpen = false, modalKind = null, glanceOpen = false, findOpen = false;
+const mode = () => (S.sidebar.pinned ? (S.sidebar.mini ? 'rail' : 'pinned') : 'hidden');
+const width = () => Math.max(220, Math.min(440, S.sidebar.width || 280));
+const screenShown = () => { const t = cur(); return t.url === START || !!E(t.id).paused; };
+const overlayFull = () => !!popKind || cmdOpen || !!modalKind || glanceOpen;
+let lastSpec = '';
+function syncLayout() {
+  const m = mode();
+  const dock = m === 'pinned' ? width() : m === 'rail' ? 72 : 0;
+  const app = $('#app');
+  app.className = 'm-' + m + (peek ? ' peek' : '') + (screenShown() ? ' screen' : '') + (dock ? '' : ' nodock');
+  document.documentElement.style.setProperty('--sbw', width() + 'px');
+  document.documentElement.style.setProperty('--dock', (dock ? dock : 0) + 'px');
+  let overlay = null;
+  if (overlayFull()) overlay = 'full';
+  else if (peek) overlay = { w: width() + 40 };
+  else if ((stackItems.length || findOpen) && m !== 'pinned') overlay = { w: 340 };
+  else if ((stackItems.length || findOpen) && m === 'pinned') overlay = null;
+  const spec = { dock, overlay, screen: screenShown() };
+  const key = JSON.stringify(spec);
+  if (key !== lastSpec) { lastSpec = key; send('layout', spec); }
+  $('#scrim').classList.toggle('on', overlayFull());
+  $('#scrim').classList.toggle('dim', !!modalKind || glanceOpen);
+}
+
+/* ---------- rendering ---------- */
+function addrHTML() {
+  const t = cur(), e = E(t.id);
+  const web = t.url !== START && !e.paused;
+  const h = bare(hostOf(t.url));
+  const off = web && isAllowed(h);
+  const n = (e.blocked || 0) + e.stops.length;
+  const q = web ? searchQuery(t.url) : null;
+  const label = !web ? (e.paused ? bare(hostOf(e.paused)) : 'Search or type a web address') : q != null ? q : h || t.url;
+  return `<div class="addr">
+    <button class="ib shield ${off || !web || !S.block.ads ? 'off' : ''}" data-act="shield" aria-label="Blocking${web && n ? ': ' + n + ' blocked' : ''}" title="What Lull blocked">${ic(off ? 'shieldOff' : 'shield')}${web && n && !off ? `<span class="badge">${n > 99 ? '99+' : n}</span>` : ''}</button>
+    <button class="txt ${web ? '' : 'ph'}" data-act="address" title="${esc(web ? t.url : 'Search or type a web address')} (${MOD}+L)">${PRIV ? `<span style="color:var(--accent)">${ic('mask', 15)}</span>` : ''}<span>${esc(label)}</span></button>
+    ${web && e.zoom && e.zoom !== 100 ? `<button class="zoomb" data-act="zoom-reset" title="Reset zoom">${e.zoom}%</button>` : ''}
+    ${web ? `<button class="ib ${e.reader ? 'on' : ''}" data-act="reader" aria-label="Reader view" aria-pressed="${e.reader}" title="Reader view">${ic('reader')}</button>` : ''}
+  </div><div class="prog ${web && e.loading ? 'on' : ''}"></div>`;
+}
+function tabRow(t) {
+  const on = t.id === cur().id;
+  const m = media[t.id];
+  const aud = m && (m.audible || m.muted);
+  return `<div class="trow ${on ? 'on' : ''}" draggable="true" data-tab="${t.id}">
+    <button class="trow-main" data-act="tab:${t.id}" title="${esc(titleOf(t))}">${fav(t.url, 18, titleOf(t))}<span class="t">${esc(titleOf(t))}</span></button>
+    ${aud ? `<button class="ib aud" data-act="mute:${t.id}" aria-label="${m.muted ? 'Unmute tab' : 'Mute tab'}" title="${m.muted ? 'Unmute' : 'Mute'}">${ic(m.muted ? 'muted' : 'speaker', 16)}</button>` : ''}
+    <button class="ib x" data-act="close:${t.id}" aria-label="Close ${esc(titleOf(t))}" title="Close tab (${MOD}+W)">${ic('x', 14)}</button>
+  </div>`;
+}
+function nowPlaying() {
+  let best = null;
+  for (const id in media) { const m = media[id]; if (!m || m.dismissed) continue; const t = S.tabs.find((x) => x.id === id); if (!t) continue; if (!best || (m.playing && !best.m.playing) || (m.playing === best.m.playing && m.at > best.m.at)) best = { t, m }; }
+  return best;
+}
+function nowHTML() {
+  const b = nowPlaying();
+  if (!b) return '';
+  const { t, m } = b;
+  return `<div class="now">${fav(t.url, 26, titleOf(t))}<button class="meta" data-act="tab:${t.id}" title="Go to this tab"><b>${m.playing ? '<span class="eq"><i></i><i></i><i></i></span>' : ''}${esc(m.title || titleOf(t))}</b><small>${esc(bare(hostOf(t.url)))}${t.ws !== S.activeWs && !PRIV ? ' · ' + esc((WS.find((w) => w.id === t.ws) || {}).name || '') : ''}</small></button>
+    <button class="ib" data-act="mtoggle:${t.id}" aria-label="${m.playing ? 'Pause' : 'Play'}" title="${m.playing ? 'Pause' : 'Play'}">${ic(m.playing ? 'pause' : 'play', 17)}</button>
+    <button class="ib" data-act="mpop:${t.id}" aria-label="Pop out player" title="Pop out player (${MOD}+Shift+P)">${ic('popout', 17)}</button>
+    <button class="ib" data-act="mdismiss:${t.id}" aria-label="Hide" title="Hide">${ic('x', 14)}</button></div>`;
+}
+function renderSidebar() {
+  const m = mode();
+  const pinned = S.sidebar.pinned;
+  $('#sb').innerHTML = `
+  <div class="sb-top drag">
+    <button class="ib" data-act="back" ${cur().url !== START && E(cur().id).canBack ? '' : 'disabled'} aria-label="Back" title="Back">${ic('back')}</button>
+    <button class="ib" data-act="fwd" ${cur().url !== START && E(cur().id).canFwd ? '' : 'disabled'} aria-label="Forward" title="Forward">${ic('fwd')}</button>
+    <button class="ib" data-act="reload" ${cur().url !== START ? '' : 'disabled'} aria-label="${E(cur().id).loading ? 'Stop' : 'Reload'}" title="${E(cur().id).loading ? 'Stop' : 'Reload'} (${MOD}+R)">${ic(E(cur().id).loading ? 'stop' : 'reload')}</button>
+    <span class="sp"></span>
+    <button class="ib" data-act="sidebar-mini" aria-label="${S.sidebar.mini ? 'Expand sidebar' : 'Minimise sidebar'}" title="${m === 'pinned' ? 'Minimise sidebar to icons' : 'Keep the sidebar open'} (${MOD}+Shift+M)">${ic(m === 'pinned' ? 'rail' : 'expand')}</button>
+    <button class="ib ${pinned ? 'on' : ''}" data-act="sidebar-pin" aria-pressed="${pinned}" aria-label="${pinned ? 'Unpin sidebar' : 'Pin sidebar'}" title="${pinned ? 'Unpin: hide the sidebar until you point at the left edge' : 'Pin the sidebar open'} (${MOD}+Shift+S)">${ic(pinned ? 'pin' : 'unpin')}</button>
+  </div>
+  ${addrHTML()}
+  ${S.favs.length ? `<div class="favs" id="sbfavs">${S.favs.slice(0, 12).map((f, i) => `<button class="tile ${bare(hostOf(f.url)) === bare(hostOf(cur().url)) ? 'on' : ''}" data-fav="${i}" title="${esc(f.name)} (right-click to edit)">${fav(f.url, 20, f.name)}</button>`).join('')}</div>` : `<div class="favs" id="sbfavs"></div>`}
+  <button class="newtab" data-act="newtab" title="New tab (${MOD}+T)">${ic('plus', 17)}New tab</button>
+  <div class="tabs" id="tablist">${wsTabs().map(tabRow).join('')}</div>
+  ${nowHTML()}
+  <div class="sb-foot">
+    ${PRIV ? `<span style="display:flex;align-items:center;gap:8px;color:var(--accent);font-weight:500;padding:0 6px">${ic('mask', 18)}Private</span>` : WS.map((w) => `<button class="space ${w.id === S.activeWs ? 'on' : ''}" data-act="ws:${w.id}" style="--c:${isDark() ? w.dark : w.light}" aria-label="${w.name} space" aria-pressed="${w.id === S.activeWs}" title="${w.name}">${ic(w.icon, 17)}<span>${w.name}</span></button>`).join('')}
+    <span class="sp"></span>
+    ${PRIV ? '' : `<button class="ib" data-act="private" aria-label="New private window" title="New private window (${MOD}+Shift+N)">${ic('mask')}</button>`}
+    <button class="ib" data-act="menu" aria-label="Menu" title="Menu">${ic('dots', 20)}</button>
+  </div>
+  ${m === 'pinned' && !peek ? '<div class="resize" title="Drag to resize"></div>' : ''}`;
+}
+function renderRail() {
+  if (mode() !== 'rail') { $('#rail').innerHTML = ''; return; }
+  const c = cur();
+  const b = nowPlaying();
+  $('#rail').innerHTML = `
+    <button class="rt" data-act="sidebar-mini" aria-label="Expand sidebar" title="Expand sidebar (${MOD}+Shift+M)">${ic('expand')}</button>
+    <div class="list">${S.favs.slice(0, 8).map((f, i) => `<button class="rt" data-fav="${i}" title="${esc(f.name)}">${fav(f.url, 20, f.name)}</button>`).join('')}</div>
+    <div class="sep"></div>
+    <div class="list" style="flex:1 1 auto">${wsTabs().map((t) => `<button class="rt ${t.id === c.id ? 'on' : ''}" data-act="tab:${t.id}" title="${esc(titleOf(t))}">${fav(t.url, 20, titleOf(t))}${media[t.id] && media[t.id].audible ? '<span class="dot"></span>' : ''}</button>`).join('')}
+    <button class="rt" data-act="newtab" aria-label="New tab" title="New tab (${MOD}+T)">${ic('plus')}</button></div>
+    ${b ? `<button class="rt" data-act="mtoggle:${b.t.id}" aria-label="${b.m.playing ? 'Pause' : 'Play'}" title="${esc(b.m.title || titleOf(b.t))}" style="color:var(--accent)">${ic(b.m.playing ? 'pause' : 'play')}</button>` : ''}
+    ${PRIV ? '' : `<button class="rt" data-act="space-next" aria-label="Change space" title="${curWs().name}: click for the next space" style="color:var(--accent)">${ic(curWs().icon)}</button>`}
+    <button class="rt" data-act="menu" aria-label="Menu" title="Menu">${ic('dots', 20)}</button>`;
+}
+function renderContent() {
+  const t = cur(), e = E(t.id), el = $('#content');
+  if (t.url === START && !e.paused) el.innerHTML = startHTML();
+  else if (e.paused) el.innerHTML = pausedHTML(e.paused);
+  else el.innerHTML = '';
+}
+function startHTML() {
+  const now = new Date();
+  if (S.week.k !== weekKey()) S.week = { k: weekKey(), n: 0 };
+  const left = sessionLeft();
+  return `<div class="start">
+    <div class="clock" data-clock>${clock(now)}</div>
+    <div class="date">${now.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })} · ${esc(curWs().name)}</div>
+    ${PRIV ? `<div class="privcard"><b style="color:var(--accent)">${ic('mask', 20)}You're browsing privately</b><span class="muted">Lull doesn't save history from this window, and deletes its cookies, logins and site data when you close it. Websites and your network can still see what you do. Downloads stay on your computer.</span></div>` : ''}
+    <form class="search" data-form="start"><span>${ic('search')}</span><input id="startIn" type="text" placeholder="Search or type a web address" aria-label="Search or type a web address" autocomplete="off" spellcheck="false"></form>
+    <div class="bigfavs">${S.favs.map((f, i) => `<button data-fav="${i}" title="${esc(f.url)}${PRIV ? '' : ' (right-click to edit)'}">${fav(f.url, 58, f.name)}<span>${esc(f.name)}</span></button>`).join('')}${PRIV ? '' : `<button class="add" data-act="fav-new">${'<span class="fav" style="width:58px;height:58px;border-radius:17px">' + ic('plus', 24) + '</span>'}<span>Add</span></button>`}</div>
+    ${PRIV ? '' : `<p class="tip">${S.favs.length ? 'Right-click a favourite to rename, move or remove it. Drag a tab onto the favourites in the sidebar to add it.' : 'Add the sites you visit most.'}</p>`}
+    <div class="foot">${left ? `<button class="btn" data-act="focus">${ic('focus', 16)} Focus · <span data-left>${fmt(left)}</span> left</button>` : ''}
+    <p class="muted" style="margin:0;font-size:13px">${S.week.n.toLocaleString('en-GB')} ads and trackers blocked this week</p>
+    ${PRIV ? `<button class="btn" data-act="close-window">Close private window</button>` : ''}
+    <button class="link" data-act="help">${ic('help', 16)}How to use Lull</button></div></div>`;
+}
+function pausedHTML(u) {
+  const h = bare(hostOf(u)), l = limitFor(h), why = focusBlocked(u) || 'limit';
+  return `<div class="paused">${fav(u, 56)}<h2>${esc(h)} is paused</h2><p>${why === 'session' ? `You're in a focus session. <span data-left>${fmt(sessionLeft())}</span> to go.` : `You've used your ${l ? l.min : 0} minutes for today. It opens again tomorrow.`}</p>
+    <div class="btnrow" style="justify-content:center"><button class="btn pri" data-act="pz-back">Go back</button>${why === 'limit' ? '<button class="btn" data-act="pz-more">5 more minutes</button>' : '<button class="btn" data-act="session-end">End session</button>'}</div></div>`;
+}
+const clock = (d) => d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+function renderAll() {
+  renderSidebar(); renderRail(); renderContent(); renderStack(); syncLayout();
+  if (popKind) renderPop();
+}
+function renderLight() { renderSidebar(); renderRail(); syncLayout(); }
+
+/* ---------- tabs ---------- */
+function showCurrent() {
+  const t = cur(), e = E(t.id);
+  if (t.url === START || e.paused) send('show', '', '');
+  else send('show', t.id, t.url);
+  applyTheme();
+  renderAll();
+  if (findOpen) closeFind();
+}
+function navigate(input, t) {
+  t = t || cur();
+  const url = toUrl(input);
+  if (!url) return;
+  const e = E(t.id);
+  e.reader = false; e.paused = null; e.failed = null;
+  t.url = url; t.title = '';
+  if (focusBlocked(url)) { e.paused = url; send('nav', t.id, 'stop'); }
+  else { e.loading = true; send('open', t.id, url); }
+  save();
+  if (t.id === cur().id) renderAll();
+}
+function selectTab(id) {
+  const t = S.tabs.find((x) => x.id === id);
+  if (!t) return;
+  S.activeWs = t.ws; S.active[t.ws] = id;
+  save(); showCurrent();
+}
+function switchBy(d) {
+  const ts = wsTabs(), i = ts.findIndex((t) => t.id === cur().id);
+  if (!ts.length) return;
+  selectTab(ts[(i + d + ts.length) % ts.length].id);
+}
+function switchWs(id) { if (id === S.activeWs) return; S.activeWs = id; cur(); save(); showCurrent(); }
+function wsBy(d) { if (PRIV) return; const i = WS.findIndex((w) => w.id === S.activeWs); switchWs(WS[(i + d + WS.length) % WS.length].id); }
+function newTab(url, opts) {
+  opts = opts || {};
+  const c = cur();
+  const at = S.tabs.indexOf(c) + 1;
+  const t = mkTab(START, S.activeWs, at > 0 ? at : null);
+  if (url) {
+    t.url = url;
+    const e = E(t.id);
+    if (focusBlocked(url)) e.paused = url;
+    else if (opts.background) { /* loads when opened */ }
+    else { e.loading = true; }
+  }
+  if (!opts.background) {
+    S.active[S.activeWs] = t.id;
+    save();
+    if (url && !E(t.id).paused) send('open', t.id, url); else showCurrent();
+    if (url) renderAll();
+  } else { save(); renderLight(); }
+  return t;
+}
+function closeTab(id) {
+  const i = S.tabs.findIndex((t) => t.id === id);
+  if (i < 0) return;
+  const t = S.tabs[i];
+  if (t.url !== START) { S.closed.unshift({ url: t.url, title: t.title, ws: t.ws }); S.closed.length = Math.min(S.closed.length, 20); }
+  const list = wsTabs(t.ws), li = list.findIndex((x) => x.id === id);
+  S.tabs.splice(i, 1);
+  delete eph[id]; delete media[id];
+  send('close', id);
+  if (S.active[t.ws] === id) {
+    const rest = wsTabs(t.ws);
+    const nx = rest[Math.min(li, rest.length - 1)];
+    S.active[t.ws] = nx ? nx.id : mkTab(START, t.ws).id;
+    save(); showCurrent();
+  } else { save(); renderLight(); }
+}
+function reopen() { const c = S.closed.shift(); if (!c) return; if (c.ws && WS.some((w) => w.id === c.ws)) S.activeWs = c.ws; newTab(c.url); }
+function openFav(i, newTabToo) {
+  const f = S.favs[i];
+  if (!f) return;
+  const h = bare(hostOf(f.url));
+  const ex = wsTabs().find((t) => bare(hostOf(t.url)) === h);
+  if (ex && !newTabToo) { selectTab(ex.id); return; }
+  const c = cur();
+  if (c.url === START && !newTabToo) navigate(f.url, c); else newTab(f.url);
+}
+function shortName(t) {
+  const h = bare(hostOf(t.url));
+  const parts = (t.title || '').split(/\s[–—|\-·:]\s/).map((x) => x.trim()).filter(Boolean);
+  let n = parts.length > 1 && parts[parts.length - 1].length <= 18 ? parts[parts.length - 1] : parts[0];
+  if (!n || n.length > 18) n = h.split('.').slice(-2)[0] || h;
+  return n.charAt(0).toUpperCase() + n.slice(1);
+}
+function isFav(url) { const h = bare(hostOf(url)); const p = (u) => { try { return new URL(u).pathname.replace(/\/$/, ''); } catch (e) { return u; } }; return S.favs.findIndex((f) => f.url === url || (h && bare(hostOf(f.url)) === h && p(f.url) === p(url))); }
+function isAllowed(h) { h = bare(h); return !!h && S.allow.some((a) => h === a || h.endsWith('.' + a)); }
+function pushSettings() {
+  send('settings', { ads: S.block.ads, cookies: S.block.cookies, popups: S.block.popups, redirects: S.block.redirects, youtube: S.block.youtube, autoplay: S.block.autoplay, autoPip: S.autoPip, updateLists: S.updateLists, allow: S.allow, engine: S.engine });
+}
+
+/* ---------- peek (hidden or minimised sidebar) ---------- */
+function setPeek(v) {
+  clearTimeout(peekT);
+  if (v === peek) return;
+  if (v && mode() === 'pinned') return;
+  peek = v;
+  renderLight();
+}
+$('#edge').addEventListener('mouseenter', () => setPeek(true));
+$('#rail').addEventListener('mouseenter', (e) => { if (e.target === $('#rail')) { clearTimeout(peekT); peekT = setTimeout(() => setPeek(true), 450); } });
+$('#rail').addEventListener('mouseleave', () => clearTimeout(peekT));
+$('#sb').addEventListener('mouseleave', () => { if (!peek || overlayFull()) return; clearTimeout(peekT); peekT = setTimeout(() => setPeek(false), 380); });
+$('#sb').addEventListener('mouseenter', () => { if (peek) clearTimeout(peekT); });
+
+/* ---------- popovers, modals, command bar ---------- */
+function anchor(sel, below) {
+  const el = document.querySelector(sel);
+  const r = el ? el.getBoundingClientRect() : { left: 12, top: 60, bottom: 60, right: 200 };
+  const p = $('#pop');
+  p.style.left = Math.max(10, Math.min(r.left, innerWidth - 350)) + 'px';
+  if (below) { p.style.top = (r.bottom + 8) + 'px'; p.style.bottom = 'auto'; }
+  else { p.style.bottom = (innerHeight - r.top + 8) + 'px'; p.style.top = 'auto'; }
+}
+let popAnchor = null;
+function openPop(kind, sel, below) {
+  closeCmd(true);
+  popKind = kind;
+  popAnchor = [sel || (kind === 'menu' ? '#sb [data-act="menu"]' : '#sb [data-act="shield"]'), below];
+  syncLayout();
+  requestAnimationFrame(() => {
+    renderPop();
+    const p = $('#pop');
+    p.classList.add('on');
+    anchor(popAnchor[0], popAnchor[1]);
+  });
+}
+window.addEventListener('resize', () => { if (popKind && popAnchor && !popKind.startsWith('tabmenu')) anchor(popAnchor[0], popAnchor[1]); });
+function renderPop() { if (!popKind) return; $('#pop').innerHTML = popKind === 'shield' ? shieldHTML() : popKind === 'menu' ? menuHTML() : popKind.startsWith('tabmenu:') ? tabMenuHTML(popKind.slice(8)) : ''; }
+function closePop() { if (!popKind) return; popKind = null; $('#pop').classList.remove('on'); $('#pop').innerHTML = ''; syncLayout(); }
+function openModal(kind) {
+  closePop(); closeCmd(true);
+  modalKind = kind;
+  syncLayout();
+  requestAnimationFrame(() => { renderModal(); $('#modal').classList.add('on'); $('#modal').scrollTop = 0; });
+}
+function renderModal() {
+  if (!modalKind) return;
+  const m = $('#modal');
+  m.classList.toggle('wide', modalKind === 'help');
+  const st = m.scrollTop;
+  m.innerHTML = { settings: settingsHTML, focus: focusHTML, help: helpHTML, fav: favEditHTML }[modalKind]();
+  m.scrollTop = st;
+}
+function closeModal() {
+  if (!modalKind) return;
+  if (modalKind === 'help' && !S.seenHelp) { S.seenHelp = true; save(); }
+  modalKind = null;
+  $('#modal').classList.remove('on');
+  $('#modal').innerHTML = '';
+  syncLayout();
+}
+
+let cmdSel = 0, cmdItems = [], cmdNewTab = false;
+function openCmd(prefill, fresh) {
+  closePop(); closeModal();
+  cmdOpen = true; cmdNewTab = !!fresh;
+  syncLayout();
+  const c = $('#cmd');
+  c.innerHTML = `<form class="cmd-in" data-form="cmd"><span class="muted">${ic('search', 20)}</span><input id="cmdIn" type="text" placeholder="Search or type a web address" aria-label="Search or type a web address" autocomplete="off" spellcheck="false"><span class="kbd">Esc</span></form><div class="cmd-list" id="cmdList"></div>`;
+  c.classList.add('on');
+  const i = $('#cmdIn');
+  i.value = prefill || '';
+  i.addEventListener('input', () => { cmdSel = 0; renderSugg(); });
+  i.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowDown') { e.preventDefault(); cmdSel = Math.min(cmdItems.length - 1, cmdSel + 1); renderSugg(true); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); cmdSel = Math.max(0, cmdSel - 1); renderSugg(true); }
+  });
+  renderSugg();
+  setTimeout(() => { i.focus(); i.select(); }, 30);
+}
+function closeCmd(quiet) { if (!cmdOpen) return; cmdOpen = false; $('#cmd').classList.remove('on'); $('#cmd').innerHTML = ''; if (!quiet) syncLayout(); }
+function renderSugg(keepOnlySel) {
+  const raw = ($('#cmdIn') || { value: '' }).value.trim(), q = raw.toLowerCase();
+  const items = [];
+  if (q) {
+    const u = toUrl(raw);
+    const isSearch = searchQuery(u) != null;
+    items.push({ act: 'go', icon: isSearch ? 'search' : 'globe', title: raw, sub: isSearch ? 'Search ' + ENGINES[S.engine][0] : 'Go to site', tag: 'Enter' });
+    if (!isSearch) items.push({ act: 'search', icon: 'search', title: raw, sub: 'Search ' + ENGINES[S.engine][0] });
+  }
+  const match = (t, u) => !q || (t + ' ' + u).toLowerCase().includes(q);
+  S.tabs.filter((t) => t.id !== cur().id && t.url !== START && match(titleOf(t), t.url)).slice(0, 5).forEach((t) => items.push({ act: 'tab', id: t.id, url: t.url, title: titleOf(t), sub: (PRIV ? '' : (WS.find((w) => w.id === t.ws) || {}).name + ' · ') + bare(hostOf(t.url)), tag: 'Switch to tab', h: 'Open tabs' }));
+  S.favs.filter((f) => match(f.name, f.url)).slice(0, 6).forEach((f) => items.push({ act: 'url', url: f.url, title: f.name, sub: bare(hostOf(f.url)), h: 'Favourites' }));
+  S.hist.filter((x) => match(x.t || '', x.u)).slice(0, q ? 8 : 6).forEach((x) => items.push({ act: 'url', url: x.u, title: x.t || bare(hostOf(x.u)), sub: bare(hostOf(x.u)), h: q ? 'History' : 'Recent' }));
+  cmdItems = items;
+  let lastH = null, html = '';
+  items.forEach((it, i) => {
+    if (it.h && it.h !== lastH) { html += `<p class="sg-h">${it.h}</p>`; lastH = it.h; }
+    html += `<button class="sg ${i === cmdSel ? 'sel' : ''}" data-act="sg:${i}">${it.url ? fav(it.url, 22, it.title) : `<span class="muted">${ic(it.icon, 20)}</span>`}<span><b>${esc(it.title)}</b><small>${esc(it.sub)}</small></span>${it.tag ? `<span class="tag">${it.tag}</span>` : ''}</button>`;
+  });
+  const list = $('#cmdList');
+  if (list) { list.innerHTML = html; if (keepOnlySel) { const s = list.querySelector('.sel'); if (s) s.scrollIntoView({ block: 'nearest' }); } }
+}
+function runSugg(i) {
+  const it = cmdItems[i];
+  const raw = $('#cmdIn').value.trim();
+  closeCmd();
+  if (!it) { if (raw) navigate(raw); return; }
+  if (it.act === 'go') navigate(raw);
+  else if (it.act === 'search') navigate(ENGINES[S.engine][1] + encodeURIComponent(raw));
+  else if (it.act === 'tab') { if (cmdNewTab && cur().url === START) closeTab(cur().id); selectTab(it.id); }
+  else navigate(it.url);
+}
+
+/* glance */
+let glanceUrl = '';
+function openGlance(url) {
+  closePop(); closeCmd(true); closeModal();
+  glanceUrl = url; glanceOpen = true;
+  const g = $('#glance');
+  g.innerHTML = `<div class="gl-head">${fav(url, 22)}<span class="t"><b id="glTitle">${esc(bare(hostOf(url)))}</b><small id="glUrl">${esc(url)}</small></span>
+    <button class="ib" data-act="gl-copy" aria-label="Copy link" title="Copy link">${ic('copy')}</button>
+    <button class="btn sm pri" data-act="gl-open">Open as tab</button>
+    <button class="ib" data-act="gl-close" aria-label="Close preview" title="Close (Esc)">${ic('x')}</button></div><div class="gl-body">Loading preview…</div>`;
+  g.classList.add('on');
+  syncLayout();
+  setTimeout(placeGlance, 60);
+}
+function placeGlance() {
+  if (!glanceOpen) return;
+  const r = $('.gl-body').getBoundingClientRect();
+  send('glance-open', glanceUrl, { x: r.left, y: r.top, w: r.width, h: r.height });
+}
+function closeGlance() { if (!glanceOpen) return; glanceOpen = false; send('glance-close'); $('#glance').classList.remove('on'); $('#glance').innerHTML = ''; syncLayout(); }
+window.addEventListener('resize', () => { if (glanceOpen) placeGlance(); });
+
+/* stack: notices, downloads, find bar */
+let stackItems = [], stackSeq = 0;
+function toast(item) {
+  item.id = ++stackSeq;
+  stackItems.push(item);
+  if (stackItems.length > 4) stackItems.shift();
+  renderStack(); syncLayout();
+  const ms = item.ms || 7000;
+  setTimeout(() => { stackItems = stackItems.filter((x) => x.id !== item.id); renderStack(); syncLayout(); }, ms);
+}
+function renderStack() {
+  const f = findOpen ? `<form class="findbar" data-form="find">${ic('find', 16)}<input id="findIn" type="text" placeholder="Find in page" aria-label="Find in page" autocomplete="off" spellcheck="false" value="${esc(findText)}"><span class="cnt" id="findCnt">${findCount}</span><button type="button" class="ib" data-act="find-prev" aria-label="Previous match">${ic('up', 16)}</button><button type="button" class="ib" data-act="find-next" aria-label="Next match">${ic('down', 16)}</button><button type="button" class="ib" data-act="find-close" aria-label="Close find">${ic('x', 15)}</button></form>` : '';
+  const had = document.activeElement && document.activeElement.id === 'findIn';
+  $('#stack').innerHTML = stackItems.map((it) => `<div class="toast">${ic(it.icon || 'shield', 18)}<span class="tt"><b>${esc(it.title)}</b>${it.sub ? `<small>${esc(it.sub)}</small>` : ''}</span>${it.action ? `<button class="btn sm" data-act="${esc(it.action)}">${esc(it.label)}</button>` : ''}<button class="ib" data-act="toast-x:${it.id}" aria-label="Dismiss">${ic('x', 14)}</button></div>`).join('') + f;
+  if (had && $('#findIn')) { const i = $('#findIn'); i.focus(); i.setSelectionRange(i.value.length, i.value.length); }
+}
+let findText = '', findCount = '';
+function openFind() {
+  const t = cur();
+  if (t.url === START || E(t.id).paused) return;
+  findOpen = true; renderStack(); syncLayout();
+  setTimeout(() => { const i = $('#findIn'); if (i) { i.focus(); i.select(); } }, 30);
+}
+function closeFind() { if (!findOpen) return; findOpen = false; findCount = ''; send('find-stop', cur().id); renderStack(); syncLayout(); }
+function findGo(forward, next) { const t = cur(); if (!findText) { findCount = ''; send('find-stop', t.id); return; } send('find', t.id, findText, { forward, findNext: next }); }
+
+/* ---------- popover and modal content ---------- */
+const sw = (act, on, label) => `<button class="sw ${on ? 'on' : ''}" role="switch" aria-checked="${on}" aria-label="${esc(label)}" data-act="${act}"><i></i></button>`;
+function shieldHTML() {
+  const t = cur(), e = E(t.id), web = t.url !== START && !e.paused, h = bare(hostOf(t.url)), off = web && isAllowed(h);
+  const pops = e.stops.filter((x) => x.kind === 'popup').length, reds = e.stops.length - pops;
+  let x = `<h3>${web ? fav(t.url, 24) : ic('shield', 20)}<span>${web ? esc(h) : 'Blocking'}</span></h3>`;
+  if (web) {
+    x += `<p class="big">${off ? 0 : e.blocked || 0}<small>${off ? 'protection is off on this site' : 'ads and trackers blocked'}</small></p>`;
+    if (pops || reds) x += `<p class="muted" style="margin:6px 0 0;font-size:13px">${pops ? pops + ' pop-up' + (pops > 1 ? 's' : '') + ' blocked' : ''}${pops && reds ? ' · ' : ''}${reds ? reds + ' redirect' + (reds > 1 ? 's' : '') + ' stopped' : ''}</p>`;
+    e.stops.filter((s) => s.url && /^https?:/.test(s.url)).slice(-4).reverse().forEach((s) => { x += `<div class="stop">${ic(s.kind === 'popup' ? 'popup' : 'redirect', 15)}<span title="${esc(s.url)}">${esc(s.url)}</span><button class="btn sm" data-act="stop-open:${e.stops.indexOf(s)}">Open</button></div>`; });
+    x += `<div class="row" style="margin-top:6px"><div><b>Protection on this site</b><small>${off ? 'Off. Ads, trackers, pop-ups and banners show here.' : 'If the site looks broken, turn this off. The page reloads.'}</small></div>${sw('tog-site', !off, 'Protection on this site')}</div>`;
+  } else x += '<p class="muted" style="margin:0">Open a website to see what Lull blocks on it.</p>';
+  x += '<p class="sec">Everywhere</p>' + [
+    ['youtube', 'YouTube ads', 'Video ads and ads in the feed, search and Shorts'],
+    ['ads', 'Ads and trackers', 'EasyList, EasyPrivacy and uBlock Origin lists'],
+    ['cookies', 'Cookie banners', 'Hides consent pop-ups on most sites'],
+    ['popups', 'Pop-ups', 'Windows you didn’t open by clicking a link'],
+    ['redirects', 'Redirects', 'Pages sending you elsewhere without a click'],
+    ['autoplay', 'Autoplay with sound', 'Videos wait until you click. Applies after restarting Lull']
+  ].map((r) => `<div class="row"><div><b>${r[1]}</b><small>${r[2]}</small></div>${sw('tog:' + r[0], S.block[r[0]] !== false, r[1])}</div>`).join('');
+  return x;
+}
+function menuHTML() {
+  const t = cur(), e = E(t.id), web = t.url !== START && !e.paused, fi = web ? isFav(t.url) : -1, left = sessionLeft();
+  const b = nowPlaying();
+  const tile = (a, i, l, sub, on, dis) => `<button class="tile2 ${on ? 'on' : ''}" data-act="${a}" ${dis ? 'disabled' : ''}>${ic(i, 21)}<span>${l}</span>${sub ? `<small>${sub}</small>` : ''}</button>`;
+  return `<div class="grid3">
+    ${tile('newtab', 'plus', 'New tab', MOD + '+T')}
+    ${PRIV ? tile('close-window', 'x', 'Close private', '') : tile('private', 'mask', 'Private window', MOD + '+Shift+N')}
+    ${PRIV ? tile('copylink', 'copy', 'Copy link', '', false, !web) : tile('favtoggle', 'star', fi >= 0 ? 'In favourites' : 'Add to favourites', '', fi >= 0, !web)}
+    ${tile('reader', 'reader', 'Reader view', e.reader ? 'On' : '', e.reader, !web)}
+    ${tile('find', 'find', 'Find in page', MOD + '+F', false, !web)}
+    ${tile(b ? 'mpop:' + b.t.id : 'mpop:' + t.id, 'popout', 'Pop out player', MOD + '+Shift+P', false, !b && !web)}
+    ${tile('focus', 'focus', 'Focus', left ? fmt(left) + ' left' : S.limits.length + (S.limits.length === 1 ? ' limit' : ' limits'), left > 0)}
+    ${tile('settings', 'gear', 'Settings')}
+    ${tile('help', 'help', 'How to use')}
+  </div>
+  ${web ? `<div class="zrow"><span>Zoom</span><button class="ib" data-act="zoom-out" aria-label="Zoom out">−</button><span style="flex:none;min-width:44px;text-align:center">${e.zoom || 100}%</span><button class="ib" data-act="zoom-in" aria-label="Zoom in">+</button></div>` : ''}
+  ${e.reader ? `<div class="zrow"><span>Reader text size</span><button class="ib" data-act="rd-" aria-label="Smaller text">A−</button><button class="ib" data-act="rd+" aria-label="Larger text">A+</button></div>` : ''}`;
+}
+function tabMenuHTML(id) {
+  const t = S.tabs.find((x) => x.id === id);
+  if (!t) return '';
+  return `<div style="display:flex;flex-direction:column;gap:2px">
+    <button class="menuitem" data-act="tm-dup:${id}">${ic('copy', 16)}Duplicate</button>
+    ${PRIV ? '' : `<button class="menuitem" data-act="tm-fav:${id}" ${t.url === START ? 'disabled' : ''}>${ic('star', 16)}Add to favourites</button>`}
+    ${PRIV ? '' : WS.filter((w) => w.id !== t.ws).map((w) => `<button class="menuitem" data-act="tm-move:${id}:${w.id}">${ic(w.icon, 16)}Move to ${w.name}</button>`).join('')}
+    ${media[id] ? `<button class="menuitem" data-act="mute:${id}">${ic(media[id].muted ? 'speaker' : 'muted', 16)}${media[id].muted ? 'Unmute tab' : 'Mute tab'}</button>` : ''}
+    <button class="menuitem" data-act="close:${id}">${ic('x', 16)}Close tab</button></div>`;
+}
+function settingsHTML() {
+  return `<div class="mhead"><h3>${ic('gear', 20)}<span>Settings</span></h3><button class="ib" data-act="modal-close" aria-label="Close">${ic('x')}</button></div>
+  <p class="sec">Sidebar</p>
+  <div class="seg">${[['pinned', 'Pinned open'], ['rail', 'Minimised to icons'], ['hidden', 'Hidden until you point at the edge']].map((o) => `<button class="${mode() === o[0] ? 'on' : ''}" data-act="sbmode:${o[0]}">${o[1]}</button>`).join('')}</div>
+  <p class="sec">Search engine</p>${Object.keys(ENGINES).map((k) => `<button class="opt ${S.engine === k ? 'on' : ''}" data-act="engine:${k}"><i></i>${ENGINES[k][0]}</button>`).join('')}
+  ${PRIV ? '' : `<p class="sec">Theme</p><div class="seg">${['system', 'light', 'dark'].map((k) => `<button class="${S.theme === k ? 'on' : ''}" data-act="theme:${k}">${k[0].toUpperCase() + k.slice(1)}</button>`).join('')}</div>`}
+  <p class="sec">Media</p>
+  <div class="row"><div><b>Pop out videos when you switch tabs</b><small>A playing video moves to a floating player and comes back when you return to its tab.</small></div>${sw('autopip', S.autoPip !== false, 'Pop out videos when you switch tabs')}</div>
+  <p class="sec">Blocking</p>
+  <div class="row"><div><b>Keep block lists up to date</b><small>Downloads the latest ad and tracker lists from Ghostery every few days. Off: Lull uses the lists it came with.</small></div>${sw('updlists', S.updateLists !== false, 'Keep block lists up to date')}</div>
+  ${PRIV ? '' : `<p class="sec">Privacy</p><div class="row"><div><b>Clear browsing data</b><small>Cookies, site storage, cache and history. You'll be signed out of sites.</small></div><button class="btn sm danger" data-act="clear">Clear</button></div>
+  <p class="sec">Default browser</p><div class="row"><div><b>Make Lull your default browser</b><small>${MAC ? 'macOS asks you to confirm.' : 'Windows opens Default apps: pick Lull under Web browser.'}</small></div><button class="btn sm" data-act="default-browser">Set</button></div>`}
+  <p class="sec">About</p><p class="muted" style="margin:0;font-size:13px;line-height:1.5">Lull ${esc(info.version || '')} for ${MAC ? 'Mac' : 'Windows'} by Caffeine Not Included. Built on Electron (Chromium). Blocking: Ghostery adblocker with EasyList, EasyPrivacy and uBlock Origin lists. Reader view: Mozilla Readability.</p>`;
+}
+function focusHTML() {
+  const left = sessionLeft(), u = usage();
+  return `<div class="mhead"><h3>${ic('focus', 20)}<span>Focus</span></h3><button class="ib" data-act="modal-close" aria-label="Close">${ic('x')}</button></div>
+  <div style="background:color-mix(in srgb,var(--accent) 9%,transparent);border-radius:16px;padding:14px">${left ? `<p class="big" data-left>${fmt(left)}</p><p class="muted">left in this focus session. The sites below stay paused until it ends.</p><button class="btn" data-act="session-end">End session</button>` : `<p style="margin:0 0 10px">A focus session pauses every site below, whatever time it has left today.</p><div class="btnrow" style="margin:0">${[15, 25, 50].map((m) => `<button class="btn" data-act="session:${m}" ${S.limits.length ? '' : 'disabled'}>${m} min</button>`).join('')}</div>`}</div>
+  <p class="sec">Daily limits</p>
+  ${S.limits.map((l) => { const used = Math.floor((u[l.host] || 0) / 60); return `<div class="lim"><div class="lim-top">${fav('https://' + l.host, 20)}<b>${esc(l.host)}</b><span class="muted">${Math.min(used, l.min)} of ${l.min} min today</span></div><div class="lim-bar"><i style="width:${Math.min(100, (u[l.host] || 0) / (l.min * 60) * 100)}%"></i></div><div style="display:flex;gap:6px"><button class="btn sm" data-act="lim-:${esc(l.host)}">−5 min</button><button class="btn sm" data-act="lim+:${esc(l.host)}">+5 min</button><button class="btn sm" style="margin-left:auto" data-act="lim-del:${esc(l.host)}">Remove</button></div></div>`; }).join('') || '<p class="muted" style="margin:4px 0">No limits yet. Add a site that eats your time.</p>'}
+  <form data-form="lim" style="display:flex;gap:8px;margin-top:12px"><input class="field" id="limHost" placeholder="e.g. youtube.com" autocomplete="off" spellcheck="false" aria-label="Site"><input class="field" id="limMin" type="number" min="1" max="600" value="20" style="width:90px" aria-label="Minutes a day"><button class="btn" type="submit">Add</button></form>
+  <p class="muted" style="font-size:12.5px">Minutes a day. Time counts while the site is on screen and Lull isn't minimised.</p>`;
+}
+let favEdit = -1;
+function favEditHTML() {
+  const f = favEdit >= 0 ? S.favs[favEdit] : { name: '', url: '' };
+  return `<div class="mhead"><h3>${favEdit >= 0 ? fav(f.url, 24, f.name) : ic('star', 20)}<span>${favEdit >= 0 ? 'Edit favourite' : 'Add a favourite'}</span></h3><button class="ib" data-act="modal-close" aria-label="Close">${ic('x')}</button></div>
+  <form data-form="fav"><label class="flabel" for="favName">Name</label><input class="field" id="favName" value="${esc(f.name)}" placeholder="e.g. Wikipedia" autocomplete="off">
+  <label class="flabel" for="favUrl">Address</label><input class="field" id="favUrl" value="${esc(f.url)}" placeholder="e.g. wikipedia.org" autocomplete="off" spellcheck="false">
+  <div class="btnrow"><button class="btn pri" type="submit">Save</button>${favEdit >= 0 ? `<button class="btn" type="button" data-act="fav-move:-1" ${favEdit === 0 ? 'disabled' : ''}>Move earlier</button><button class="btn" type="button" data-act="fav-move:1" ${favEdit === S.favs.length - 1 ? 'disabled' : ''}>Move later</button><button class="btn danger" type="button" data-act="fav-del">Remove</button>` : ''}</div></form>`;
+}
+function helpHTML() {
+  const k = (s) => `<span class="kbd">${s}</span>`;
+  const sec = (n, t, b) => `<div class="help-sec"><h4><span class="n">${n}</span>${t}</h4>${b}</div>`;
+  return `<div class="mhead"><h3>${logo(22)}<span>How to use Lull</span></h3><button class="ib" data-act="modal-close" aria-label="Close">${ic('x')}</button></div>
+  <p class="muted" style="margin:0 0 14px">Everything lives in the sidebar on the left. Here's what it does.</p>
+  ${sec(1, 'The sidebar', `<ul><li><b>Address</b> at the top: click it (or press ${k(MOD + '+L')}) to search or type a site. The shield on its left shows how many ads and trackers Lull blocked on the page.</li><li><b>Favourites</b> under it: one click opens them.</li><li><b>Your tabs</b> below. Drag to reorder, middle-click or ${k(MOD + '+W')} to close.</li><li>At the bottom: your <b>spaces</b>, a <b>private window</b> button and the <b>menu</b>.</li></ul>`)}
+  ${sec(2, 'Pin, minimise or hide the sidebar', `<p>The two buttons at the top right of the sidebar control it:</p><ul><li><b>Minimise</b> ${ic('rail', 14)} shrinks it to a slim column of icons (${k(MOD + '+Shift+M')}). Point at the column to see everything.</li><li><b>Pin</b> ${ic('pin', 14)} keeps it open. Unpin it (${k(MOD + '+Shift+S')}) and it hides completely: point at the left edge of the window to bring it back.</li><li>Drag the right edge of the sidebar to make it wider or narrower.</li></ul>`)}
+  ${sec(3, 'Spaces', `<p>Tabs live in three spaces: <b>Personal</b>, <b>Dev</b> and <b>Reading</b>, each with its own tabs and colour. Switch with the buttons at the bottom of the sidebar or ${k(MOD + '+Alt+→')}. Right-click a tab to move it to another space.</p>`)}
+  ${sec(4, 'Pop out media', `<ul><li>Switch away from a tab that's playing a video and it <b>pops out</b> into a floating player that stays on top. Go back to the tab and it pops back in. (Turn this off in Settings.)</li><li>Anything playing shows in <b>Now playing</b> at the bottom of the sidebar: play, pause, or pop it out from there, or press ${k(MOD + '+Shift+P')}.</li><li>Music and podcasts (no video) pop out into a small <b>mini player</b> window.</li><li>Right-click a video for <b>Pop out video</b>. Mute a noisy tab with the speaker icon next to it.</li></ul>`)}
+  ${sec(5, 'Glance: preview a link', `<p>Hold ${k(MAC ? 'Option' : 'Alt')} and click any link, or right-click it and choose <b>Glance at link</b>. It opens in a preview on top of the page. Click <b>Open as tab</b> to keep it, or press ${k('Esc')} to close it.</p>`)}
+  ${sec(6, 'Favourites', `<ul><li>Add one from the menu (<b>Add to favourites</b>), with the <b>Add</b> tile on the New Tab page, or by dragging a tab onto the favourites in the sidebar.</li><li>Right-click a favourite to rename it, move it or remove it.</li></ul>`)}
+  ${sec(7, 'Blocking', `<p>Lull blocks ads and trackers (EasyList, EasyPrivacy and uBlock Origin lists), YouTube ads, cookie banners, pop-ups, redirects and autoplaying sound. When it stops a pop-up or a redirect, a note appears at the bottom left: click <b>Open</b> or <b>Go there</b> if you wanted it. If a site looks broken, click the shield and switch off <b>Protection on this site</b>.</p>`)}
+  ${sec(8, 'Private windows', `<p>${k(MOD + '+Shift+N')} or the mask button opens a private window. It keeps no history, and its cookies, logins and site data are deleted when you close it.</p>`)}
+  ${sec(9, 'Stay focused', `<p><b>Reader view</b> (the lines icon in the address, or ${k(MOD + '+Alt+R')}) shows an article as clean text. <b>Focus</b> in the menu sets daily time limits for sites and runs focus sessions that pause them.</p>`)}
+  ${sec(10, 'Keyboard shortcuts', `<div class="keys">${[[MOD + '+T', 'New tab'], [MOD + '+W', 'Close tab'], [MOD + '+Shift+T', 'Reopen closed tab'], [MOD + '+L', 'Search or type an address'], [MOD + '+F', 'Find in page'], ['Ctrl+Tab', 'Next tab'], [MOD + '+Alt+← →', 'Previous / next space'], [MOD + '+Shift+S', 'Pin or hide the sidebar'], [MOD + '+Shift+M', 'Minimise the sidebar'], [MOD + '+Shift+P', 'Pop out the player'], [MOD + '+Shift+N', 'New private window'], [MOD + '+ + / −', 'Zoom in / out']].map((r) => `${k(r[0])}<span>${r[1]}</span>`).join('')}</div>`)}
+  <div class="btnrow"><button class="btn pri" data-act="modal-close">${S.seenHelp ? 'Done' : 'Start browsing'}</button></div>`;
+}
+
+/* ---------- events from Lull ---------- */
+let visible = true, info = {};
+L.on((type, d) => {
+  try {
+    switch (type) {
+      case 'page': {
+        if (d.tab === 'glance') { const a = $('#glTitle'), b = $('#glUrl'); if (a && d.title) a.textContent = d.title; if (b && d.url) b.textContent = d.url; return; }
+        const t = S.tabs.find((x) => x.id === d.tab); if (!t) return;
+        const e = E(t.id);
+        if (d.url && !/^about:blank/.test(d.url)) t.url = d.url;
+        if (d.title && !/^https?:\/\//.test(d.title)) t.title = d.title;
+        e.canBack = !!d.canBack; e.canFwd = !!d.canFwd; e.zoom = d.zoom || 100;
+        if (d.started) { e.stops = []; e.reader = false; e.failed = null; }
+        e.loading = !!d.loading;
+        if (d.started && d.url && focusBlocked(d.url) && !e.paused) { e.paused = d.url; send('nav', t.id, 'stop'); if (t.id === cur().id) showCurrent(); }
+        if (!d.loading && /^https?:/.test(t.url) && !PRIV) addHist(t.url, t.title);
+        if (media[t.id] && d.title) media[t.id].title = d.title;
+        save();
+        if (t.id === cur().id || t.ws === S.activeWs) renderLight();
+        if (popKind === 'menu') renderPop();
+        break;
+      }
+      case 'icon': { if (!d.host || !d.url) return; if (S.icons[d.host] !== d.url) { S.icons[d.host] = d.url; const ks = Object.keys(S.icons); if (ks.length > 300) delete S.icons[ks[0]]; save(); renderLight(); if (screenShown()) renderContent(); } break; }
+      case 'blocked': {
+        const e = E(d.tab);
+        if (d.reset) e.blocked = 0;
+        if (d.inc) { e.blocked = (e.blocked || 0) + d.inc; if (S.week.k !== weekKey()) S.week = { k: weekKey(), n: 0 }; S.week.n += d.inc; saveSoon(); }
+        if (d.tab === cur().id) { scheduleAddr(); if (popKind === 'shield') renderPop(); }
+        break;
+      }
+      case 'stopped': {
+        const e = E(d.tab); e.stops.push({ kind: d.kind, url: d.url }); if (e.stops.length > 30) e.stops.shift();
+        if (d.tab === cur().id || d.tab === 'glance') {
+          const h = bare(hostOf(d.url));
+          if (d.kind === 'redirect' && d.url) toast({ icon: 'redirect', title: 'Redirect stopped', sub: 'The page tried to send you to ' + (h || d.url), action: 'stop-go:' + d.tab + ':' + (e.stops.length - 1), label: 'Go there', ms: 9000 });
+          else if (d.kind === 'popup' && e.stops.filter((x) => x.kind === 'popup').length === 1) toast({ icon: 'popup', title: 'Pop-up blocked', sub: h ? h + ' tried to open' : 'The page tried to open a window', action: d.url ? 'stop-open:' + (e.stops.length - 1) : '', label: 'Open', ms: 8000 });
+          renderLight(); if (popKind === 'shield') renderPop();
+        }
+        break;
+      }
+      case 'newtab': {
+        const src = S.tabs.find((x) => x.id === d.from);
+        if (src && src.ws !== S.activeWs) S.activeWs = src.ws;
+        if (glanceOpen) closeGlance();
+        newTab(d.url, { background: !!d.background });
+        break;
+      }
+      case 'glance': openGlance(d.url); break;
+      case 'openurl': closeAll(); newTab(d.url); break;
+      case 'select': selectTab(d.tab); break;
+      case 'media': {
+        const m = media[d.tab] || {};
+        Object.assign(m, { playing: d.playing, audible: d.audible, muted: d.muted, title: d.title, url: d.url, at: Date.now() });
+        if (d.playing) m.dismissed = false;
+        media[d.tab] = m;
+        renderLight();
+        if (popKind) renderPop();
+        break;
+      }
+      case 'reader': { const e = E(d.tab); e.reader = d.result === 'ok'; if (d.result === 'ok') send('reader-size', d.tab, S.readerSize); else if (d.result === 'none') toast({ icon: 'reader', title: "Reader view isn't available on this page" }); renderLight(); break; }
+      case 'found': if (d.tab === cur().id) { findCount = d.matches ? d.active + ' of ' + d.matches : 'No matches'; const c = $('#findCnt'); if (c) c.textContent = findCount; } break;
+      case 'download': {
+        if (d.state === 'started') toast({ icon: 'dl', title: 'Downloading', sub: d.name, ms: 4000 });
+        else if (d.state === 'completed') toast({ icon: 'dl', title: 'Downloaded', sub: d.name, action: 'show-dl:' + d.path, label: 'Show', ms: 10000 });
+        else toast({ icon: 'dl', title: 'Download failed', sub: d.name });
+        break;
+      }
+      case 'crashed': if (d.tab === cur().id) toast({ icon: 'reload', title: 'This tab stopped working', sub: 'Reload it to try again', action: 'reload', label: 'Reload', ms: 15000 }); break;
+      case 'evicted': { const e = E(d.tab); e.blocked = 0; break; }
+      case 'visible': visible = !!d.v; break;
+      case 'shortcut': shortcut(d.name); break;
+    }
+  } catch (err) { console.error(err); }
+});
+let addrT = null;
+function scheduleAddr() { if (addrT) return; addrT = setTimeout(() => { addrT = null; renderLight(); }, 250); }
+let saveSoonT = null;
+function saveSoon() { if (saveSoonT) return; saveSoonT = setTimeout(() => { saveSoonT = null; save(); }, 3000); }
+function addHist(u, t) { S.hist = S.hist.filter((x) => x.u !== u); S.hist.unshift({ u, t: t || '', ts: Date.now() }); if (S.hist.length > 1000) S.hist.length = 1000; }
+function closeAll() { closeCmd(true); closeGlance(); closePop(); closeModal(); setPeek(false); syncLayout(); }
+
+function shortcut(name) {
+  const t = cur();
+  switch (name) {
+    case 'new-tab': closeAll(); newTab(); openCmd('', true); break;
+    case 'reopen': reopen(); break;
+    case 'address': act('address'); break;
+    case 'close-tab': if (glanceOpen) closeGlance(); else closeTab(t.id); break;
+    case 'find': openFind(); break;
+    case 'find-next': if (findOpen) findGo(true, true); else openFind(); break;
+    case 'find-prev': if (findOpen) findGo(false, true); break;
+    case 'sidebar-pin': act('sidebar-pin'); break;
+    case 'sidebar-mini': act('sidebar-mini'); break;
+    case 'reader': act('reader'); break;
+    case 'next-tab': switchBy(1); break;
+    case 'prev-tab': switchBy(-1); break;
+    case 'next-space': wsBy(1); break;
+    case 'prev-space': wsBy(-1); break;
+    case 'media-toggle': { const b = nowPlaying(); if (b) send('media', b.t.id, 'toggle'); break; }
+    case 'media-popout': { const b = nowPlaying(); if (b) send('media', b.t.id, 'popout'); else if (t.url !== START) send('media', t.id, 'popout'); break; }
+    case 'help': openModal('help'); break;
+  }
+}
+
+/* ---------- actions ---------- */
+function act(a, b, ev) {
+  const ix = a.indexOf(':');
+  const k = ix < 0 ? a : a.slice(0, ix), v = ix < 0 ? '' : a.slice(ix + 1);
+  const t = cur(), e = E(t.id), web = t.url !== START && !e.paused;
+  switch (k) {
+    case 'address': { const q = web ? searchQuery(t.url) : null; if (t.url === START && !e.paused && $('#startIn')) { $('#startIn').focus(); break; } openCmd(web ? (q != null ? q : t.url) : ''); break; }
+    case 'shield': if (popKind === 'shield') closePop(); else openPop('shield', '#sb [data-act="shield"]', true); break;
+    case 'menu': if (popKind === 'menu') closePop(); else openPop('menu', mode() === 'rail' && !peek ? '#rail [data-act="menu"]' : '#sb [data-act="menu"]', false); break;
+    case 'back': send('nav', t.id, 'back'); break;
+    case 'fwd': send('nav', t.id, 'forward'); break;
+    case 'reload': if (web) send('nav', t.id, e.loading ? 'stop' : 'reload'); break;
+    case 'reader': if (!web) break; closePop(); if (e.reader) { e.reader = false; send('nav', t.id, 'reload'); renderLight(); } else send('reader', t.id); break;
+    case 'sidebar-pin': S.sidebar.pinned = !S.sidebar.pinned; peek = false; save(); renderAll(); break;
+    case 'sidebar-mini': if (!S.sidebar.pinned) { S.sidebar.pinned = true; S.sidebar.mini = false; } else S.sidebar.mini = !S.sidebar.mini; peek = false; save(); renderAll(); break;
+    case 'sbmode': S.sidebar.pinned = v !== 'hidden'; S.sidebar.mini = v === 'rail'; peek = false; save(); renderAll(); renderModal(); break;
+    case 'ws': switchWs(v); break;
+    case 'space-next': wsBy(1); break;
+    case 'tab': closePop(); setPeek(false); if (v !== t.id) selectTab(v); break;
+    case 'close': closePop(); closeTab(v); break;
+    case 'mute': { const m = media[v]; send('media', v, m && m.muted ? 'unmute' : 'mute'); closePop(); break; }
+    case 'newtab': closePop(); setPeek(false); newTab(); openCmd('', true); break;
+    case 'private': closePop(); send('private'); break;
+    case 'close-window': send('close-window'); break;
+    case 'mtoggle': send('media', v, 'toggle'); break;
+    case 'mpop': closePop(); send('media', v, 'popout'); break;
+    case 'mdismiss': if (media[v]) media[v].dismissed = true; renderLight(); break;
+    case 'favtoggle': { const i = isFav(t.url); if (i >= 0) { S.favs.splice(i, 1); toast({ icon: 'star', title: 'Removed from favourites', ms: 3000 }); } else { S.favs.push({ url: t.url, name: shortName(t) }); toast({ icon: 'star', title: 'Added to favourites', ms: 3000 }); } save(); renderLight(); renderPop(); break; }
+    case 'copylink': send('copy', t.url); toast({ icon: 'copy', title: 'Link copied', ms: 2500 }); closePop(); break;
+    case 'find': closePop(); openFind(); break;
+    case 'find-next': findGo(true, true); break;
+    case 'find-prev': findGo(false, true); break;
+    case 'find-close': closeFind(); break;
+    case 'zoom-in': send('zoom', t.id, 1); break;
+    case 'zoom-out': send('zoom', t.id, -1); break;
+    case 'zoom-reset': send('zoom', t.id, 0); break;
+    case 'rd-': case 'rd+': S.readerSize = Math.max(14, Math.min(28, S.readerSize + (k === 'rd+' ? 1 : -1))); save(); send('reader-size', t.id, S.readerSize); break;
+    case 'focus': openModal('focus'); break;
+    case 'settings': openModal('settings'); break;
+    case 'help': openModal('help'); break;
+    case 'modal-close': closeModal(); break;
+    case 'engine': S.engine = v; save(); pushSettings(); renderModal(); break;
+    case 'theme': S.theme = v; save(); applyTheme(); renderAll(); renderModal(); break;
+    case 'autopip': S.autoPip = S.autoPip === false; save(); pushSettings(); renderModal(); break;
+    case 'updlists': S.updateLists = S.updateLists === false; save(); pushSettings(); renderModal(); break;
+    case 'clear': if (b.dataset.sure) { send('clear-data'); S.hist = []; S.icons = {}; save(); closeModal(); toast({ icon: 'shield', title: 'Browsing data cleared' }); } else { b.dataset.sure = '1'; b.textContent = 'Click again to clear'; } break;
+    case 'default-browser': send('default-browser'); break;
+    case 'tog-site': { const h = bare(hostOf(t.url)); if (!h) break; if (isAllowed(h)) S.allow = S.allow.filter((x) => !(h === x || h.endsWith('.' + x))); else S.allow.push(h); save(); pushSettings(); send('nav', t.id, 'reload'); renderPop(); renderLight(); break; }
+    case 'tog': S.block[v] = S.block[v] === false; save(); pushSettings(); renderPop(); renderLight(); if (web && v !== 'autoplay') send('nav', t.id, 'reload'); break;
+    case 'stop-open': { const s = e.stops[+v]; closePop(); if (s && s.url) newTab(s.url); break; }
+    case 'stop-go': { const parts = v.split(':'); const tab = S.tabs.find((x) => x.id === parts[0]); const s = tab ? E(tab.id).stops[+parts[1]] : null; if (s && s.url) navigate(s.url, tab); stackItems = []; renderStack(); syncLayout(); break; }
+    case 'toast-x': stackItems = stackItems.filter((x) => String(x.id) !== v); renderStack(); syncLayout(); break;
+    case 'show-dl': send('show-download', v); break;
+    case 'sg': runSugg(+v); break;
+    case 'gl-open': { L.invoke('lull:glance-url').then((u) => { const url = u && /^https?:/.test(u) ? u : glanceUrl; closeGlance(); newTab(url); }); break; }
+    case 'gl-copy': send('copy', glanceUrl); toast({ icon: 'copy', title: 'Link copied', ms: 2500 }); break;
+    case 'gl-close': closeGlance(); break;
+    case 'fav-new': favEdit = -1; openModal('fav'); setTimeout(() => { const n = $('#favUrl'); if (n) n.focus(); }, 60); break;
+    case 'fav-move': { const j = favEdit + (+v); if (j < 0 || j >= S.favs.length) break; const f = S.favs.splice(favEdit, 1)[0]; S.favs.splice(j, 0, f); favEdit = j; save(); renderModal(); renderLight(); if (screenShown()) renderContent(); break; }
+    case 'fav-del': if (favEdit >= 0) { S.favs.splice(favEdit, 1); save(); closeModal(); renderAll(); } break;
+    case 'tm-dup': { const x = S.tabs.find((y) => y.id === v); closePop(); if (x && x.url !== START) newTab(x.url); break; }
+    case 'tm-fav': { const x = S.tabs.find((y) => y.id === v); closePop(); if (x && isFav(x.url) < 0) { S.favs.push({ url: x.url, name: shortName(x) }); save(); renderLight(); toast({ icon: 'star', title: 'Added to favourites', ms: 3000 }); } break; }
+    case 'tm-move': { const [id, ws] = v.split(':'); const x = S.tabs.find((y) => y.id === id); closePop(); if (!x) break; const wasActive = S.active[x.ws] === id; const from = x.ws; x.ws = ws; if (wasActive) { const rest = wsTabs(from); S.active[from] = rest[0] ? rest[0].id : mkTab(START, from).id; } save(); showCurrent(); toast({ icon: 'open', title: 'Moved to ' + (WS.find((w) => w.id === ws) || {}).name, ms: 3000 }); break; }
+    case 'session': S.session = Date.now() + (+v) * 60000; save(); renderModal(); checkFocusNow(); break;
+    case 'session-end': S.session = 0; save(); renderModal(); unpause(t); break;
+    case 'lim+': case 'lim-': { const l = S.limits.find((x) => x.host === v); if (l) { l.min = Math.max(5, l.min + (k === 'lim+' ? 5 : -5)); save(); renderModal(); checkFocusNow(); } break; }
+    case 'lim-del': S.limits = S.limits.filter((x) => x.host !== v); save(); renderModal(); unpause(t); break;
+    case 'pz-back': { e.paused = null; if (e.canBack) { send('show', t.id, ''); send('nav', t.id, 'back'); } else { t.url = START; t.title = 'New tab'; send('close', t.id); } save(); showCurrent(); break; }
+    case 'pz-more': { const l = limitFor(hostOf(e.paused || '')); if (l) { usage()[l.host] = Math.max(0, l.min * 60 - 300); save(); } unpause(t); break; }
+  }
+}
+function unpause(t) { const e = E(t.id); if (!e.paused) return; const u = e.paused; e.paused = null; t.url = u; send('open', t.id, u); save(); showCurrent(); }
+function checkFocusNow() { const t = cur(), e = E(t.id); if (t.url !== START && !e.paused && focusBlocked(t.url)) { e.paused = t.url; send('nav', t.id, 'stop'); showCurrent(); } else if (screenShown()) renderContent(); }
+
+/* ---------- input ---------- */
+document.addEventListener('click', (ev) => {
+  const f = ev.target.closest('[data-fav]');
+  if (f) { closePop(); setPeek(false); openFav(+f.dataset.fav, ev.metaKey || ev.ctrlKey); return; }
+  const b = ev.target.closest('[data-act]');
+  if (b && !b.disabled) act(b.dataset.act, b, ev);
+});
+document.addEventListener('auxclick', (ev) => {
+  if (ev.button !== 1) return;
+  const row = ev.target.closest('.trow');
+  if (row) { ev.preventDefault(); closeTab(row.dataset.tab); }
+  const f = ev.target.closest('[data-fav]');
+  if (f) { ev.preventDefault(); openFav(+f.dataset.fav, true); }
+});
+document.addEventListener('contextmenu', (ev) => {
+  ev.preventDefault();
+  const f = ev.target.closest('[data-fav]');
+  if (f && !PRIV) { favEdit = +f.dataset.fav; openModal('fav'); return; }
+  const row = ev.target.closest('.trow');
+  if (row) { popKind = 'tabmenu:' + row.dataset.tab; syncLayout(); requestAnimationFrame(() => { renderPop(); const p = $('#pop'); p.classList.add('on'); p.style.width = '230px'; p.style.left = Math.min(ev.clientX, innerWidth - 240) + 'px'; p.style.top = Math.min(ev.clientY, innerHeight - 260) + 'px'; p.style.bottom = 'auto'; }); }
+});
+$('#scrim').addEventListener('click', () => { if (glanceOpen) closeGlance(); else if (modalKind) closeModal(); else if (cmdOpen) closeCmd(); else closePop(); $('#pop').style.width = ''; });
+document.addEventListener('keydown', (ev) => {
+  if (ev.key === 'Escape') {
+    if (cmdOpen) closeCmd(); else if (glanceOpen) closeGlance(); else if (modalKind) closeModal(); else if (popKind) closePop(); else if (findOpen) closeFind(); else if (peek) setPeek(false);
+  }
+});
+document.addEventListener('submit', (ev) => {
+  ev.preventDefault();
+  const f = ev.target.dataset.form;
+  if (f === 'cmd') runSugg(cmdItems.length ? cmdSel : -1);
+  if (f === 'start') { const v = $('#startIn').value.trim(); if (v) navigate(v); }
+  if (f === 'find') findGo(true, true);
+  if (f === 'lim') {
+    const h = bare(hostOf(toUrl($('#limHost').value.trim())) || '');
+    const m = Math.max(1, Math.min(600, parseInt($('#limMin').value, 10) || 20));
+    if (!h || !h.includes('.')) { toast({ icon: 'focus', title: 'Type a site address, like youtube.com' }); return; }
+    const l = S.limits.find((x) => x.host === h); if (l) l.min = m; else S.limits.push({ host: h, min: m });
+    save(); renderModal(); checkFocusNow();
+  }
+  if (f === 'fav') {
+    const name = $('#favName').value.trim(), raw = $('#favUrl').value.trim(), url = toUrl(raw);
+    if (!raw || (searchQuery(url) != null && !/^https?:/i.test(raw))) { toast({ icon: 'star', title: 'Type an address, like wikipedia.org' }); return; }
+    const nm = name || bare(hostOf(url)).split('.').slice(-2)[0] || raw;
+    const item = { url, name: nm.charAt(0).toUpperCase() + nm.slice(1) };
+    if (favEdit >= 0) S.favs[favEdit] = item; else S.favs.push(item);
+    save(); closeModal(); renderAll();
+  }
+});
+document.addEventListener('input', (ev) => {
+  if (ev.target.id === 'findIn') { findText = ev.target.value; findGo(true, false); }
+});
+
+/* drag tabs: reorder, or drop on the favourites to add */
+let dragId = null;
+document.addEventListener('dragstart', (ev) => { const r = ev.target.closest && ev.target.closest('.trow'); if (!r) return; dragId = r.dataset.tab; ev.dataTransfer.effectAllowed = 'move'; ev.dataTransfer.setData('text/plain', dragId); });
+document.addEventListener('dragover', (ev) => {
+  if (!dragId) return;
+  const r = ev.target.closest('.trow'), fv = ev.target.closest('#sbfavs');
+  document.querySelectorAll('.drag-over').forEach((x) => x.classList.remove('drag-over'));
+  const fz = $('#sbfavs'); if (fz) fz.classList.toggle('drop', !!fv);
+  if (r || fv) { ev.preventDefault(); if (r) r.classList.add('drag-over'); }
+});
+document.addEventListener('drop', (ev) => {
+  if (!dragId) return;
+  ev.preventDefault();
+  const r = ev.target.closest('.trow'), fv = ev.target.closest('#sbfavs');
+  const t = S.tabs.find((x) => x.id === dragId);
+  if (fv && t && t.url !== START && isFav(t.url) < 0) { S.favs.push({ url: t.url, name: shortName(t) }); toast({ icon: 'star', title: 'Added to favourites', ms: 3000 }); }
+  else if (r && t && r.dataset.tab !== dragId) { const from = S.tabs.indexOf(t); S.tabs.splice(from, 1); const to = S.tabs.findIndex((x) => x.id === r.dataset.tab); S.tabs.splice(to, 0, t); }
+  dragId = null; save(); renderLight();
+});
+document.addEventListener('dragend', () => { dragId = null; document.querySelectorAll('.drag-over').forEach((x) => x.classList.remove('drag-over')); const fz = $('#sbfavs'); if (fz) fz.classList.remove('drop'); });
+
+/* resize the pinned sidebar */
+let rz = null;
+document.addEventListener('pointerdown', (ev) => { if (ev.target.classList && ev.target.classList.contains('resize')) { rz = { x: ev.clientX, w: width() }; ev.target.setPointerCapture(ev.pointerId); document.body.style.cursor = 'col-resize'; } });
+document.addEventListener('pointermove', (ev) => { if (!rz) return; S.sidebar.width = Math.max(220, Math.min(440, rz.w + ev.clientX - rz.x)); document.documentElement.style.setProperty('--sbw', S.sidebar.width + 'px'); document.documentElement.style.setProperty('--dock', S.sidebar.width + 'px'); syncLayout(); });
+document.addEventListener('pointerup', () => { if (!rz) return; rz = null; document.body.style.cursor = ''; save(); });
+
+/* ---------- ticking: clock, focus sessions, daily limits ---------- */
+let hadSession = sessionLeft() > 0;
+setInterval(() => {
+  const now = new Date();
+  document.querySelectorAll('[data-clock]').forEach((el) => { el.textContent = clock(now); });
+  const left = sessionLeft();
+  document.querySelectorAll('[data-left]').forEach((el) => { el.textContent = fmt(left); });
+  if (hadSession && !left) { S.session = 0; save(); toast({ icon: 'focus', title: 'Focus session finished' }); const t = cur(); if (E(t.id).paused && !focusBlocked(E(t.id).paused)) unpause(t); else if (screenShown()) renderContent(); renderModal(); }
+  hadSession = left > 0;
+  const t = cur(), e = E(t.id);
+  if (visible && t.url !== START && !e.paused) {
+    const l = limitFor(hostOf(t.url));
+    if (l) {
+      const u = usage();
+      u[l.host] = (u[l.host] || 0) + 1;
+      const rem = l.min * 60 - u[l.host];
+      if (rem === 60) toast({ icon: 'focus', title: '1 minute left on ' + l.host + ' today' });
+      if (rem <= 0) { e.paused = t.url; send('nav', t.id, 'stop'); showCurrent(); toast({ icon: 'focus', title: 'Daily limit reached for ' + l.host }); }
+      if (u[l.host] % 15 === 0) save();
+      if (modalKind === 'focus' && u[l.host] % 5 === 0) renderModal();
+    }
+  }
+}, 1000);
+
+/* ---------- start ---------- */
+(async () => {
+  try { info = (await L.invoke('lull:info')) || {}; } catch (e) { info = {}; }
+  let saved = null;
+  try { saved = JSON.parse((await L.invoke('lull:state')) || 'null'); } catch (e) { saved = null; }
+  if (saved && saved.v === 1) {
+    S = Object.assign(defaults(), saved);
+    S.block = Object.assign(defaults().block, saved.block || {});
+    S.sidebar = Object.assign(defaults().sidebar, saved.sidebar || {});
+  }
+  if (PRIV) S = Object.assign(S, { activeWs: 'private', tabs: [{ id: 'p1', ws: 'private', url: START, title: 'New tab' }], active: { private: 'p1' }, hist: [], closed: [], seenHelp: true, week: { k: weekKey(), n: 0 } });
+  if (S.week.k !== weekKey()) S.week = { k: weekKey(), n: 0 };
+  applyTheme();
+  pushSettings();
+  showCurrent();
+  if (!S.seenHelp) openModal('help');
+  send('ready');
+})();
+})();
+</script>
+</body>
+</html>

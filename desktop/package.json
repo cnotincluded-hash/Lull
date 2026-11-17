@@ -1,0 +1,86 @@
+{
+  "name": "lull",
+  "productName": "Lull",
+  "version": "1.0.0",
+  "description": "A quiet browser by Caffeine Not Included",
+  "author": "Caffeine Not Included",
+  "license": "UNLICENSED",
+  "private": true,
+  "main": "main/main.js",
+  "scripts": {
+    "start": "electron .",
+    "engine": "node scripts/build-engine.js",
+    "dist:win": "npm run preload && npm run engine && electron-builder --win nsis --x64 --publish never",
+    "dist:mac": "npm run preload && npm run engine && electron-builder --mac dmg --universal --publish never",
+    "preload": "node scripts/gen-preload.js"
+  },
+  "dependencies": {
+    "@ghostery/adblocker-electron": "2.20.3"
+  },
+  "devDependencies": {
+    "electron": "45.2.1",
+    "electron-builder": "26.18.1"
+  },
+  "build": {
+    "appId": "com.caffeinenotincluded.lull",
+    "productName": "Lull",
+    "copyright": "Caffeine Not Included",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "main/**",
+      "preload/**",
+      "ui/**",
+      "assets/**",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "engine",
+        "to": "engine",
+        "filter": [
+          "*.bin"
+        ]
+      }
+    ],
+    "protocols": [
+      {
+        "name": "Web",
+        "schemes": [
+          "http",
+          "https"
+        ]
+      }
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "shortcutName": "Lull",
+      "artifactName": "Lull-${version}-setup.${ext}"
+    },
+    "mac": {
+      "target": "dmg",
+      "icon": "build/icon.icns",
+      "category": "public.app-category.productivity",
+      "identity": "-",
+      "artifactName": "Lull-${version}-universal.${ext}",
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "Websites you allow can use your microphone.",
+        "NSCameraUsageDescription": "Websites you allow can use your camera.",
+        "LSMinimumSystemVersion": "12.0"
+      },
+      "hardenedRuntime": false,
+      "minimumSystemVersion": "12.0"
+    },
+    "dmg": {
+      "title": "Lull ${version}"
+    }
+  }
+}
