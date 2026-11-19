@@ -1,0 +1,788 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Lull</title>
+<style>
+@font-face{font-family:'Onest';font-weight:400;src:url(fonts/onest-latin-400-normal.woff2) format('woff2')}
+@font-face{font-family:'Onest';font-weight:500;src:url(fonts/onest-latin-500-normal.woff2) format('woff2')}
+@font-face{font-family:'Onest';font-weight:600;src:url(fonts/onest-latin-600-normal.woff2) format('woff2')}
+:root{
+  /* Layout: the browser chrome; native page views sit underneath, this layer only covers the bar unless a panel is open */
+  --bg:#F3F3F1; --surface:#FFFFFF; --ink:#1B1C20; --muted:#6B6D76; --line:rgba(24,26,34,.10); --chrome:rgba(255,255,255,.9);
+  --shadow:0 8px 28px rgba(20,22,30,.13);
+  --ui:'Onest',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+  --accent:#3D7A80;
+  color-scheme:light;
+}
+html.priv{--bg:#17141F; --surface:#221E2C; --ink:#EDEBF3; --muted:#A39DB4; --line:rgba(255,255,255,.09); --chrome:rgba(40,35,52,.92); --shadow:0 8px 28px rgba(0,0,0,.5); color-scheme:dark}
+html.dark:not(.priv){--bg:#121316; --surface:#1C1D22; --ink:#ECECEF; --muted:#9C9EA8; --line:rgba(255,255,255,.09); --chrome:rgba(36,37,43,.92); --shadow:0 8px 28px rgba(0,0,0,.5); color-scheme:dark}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;margin:0;background:transparent;overflow:hidden}
+body{font-family:var(--ui);color:var(--ink);-webkit-font-smoothing:antialiased;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+button{font:inherit;color:inherit;cursor:pointer}
+button:disabled{opacity:.35;cursor:default}
+input{-webkit-user-select:text;user-select:text}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.ic{display:block;flex:none}
+.muted{color:var(--muted)}
+.small{font-size:12.5px;line-height:1.45}
+
+/* full-screen views drawn by Lull: new tab page, paused page */
+#screen{position:absolute;inset:0;background:var(--bg);display:none;overflow-y:auto;padding-bottom:84px}
+#screen.on{display:block}
+
+/* bar */
+.glass{background:var(--chrome);backdrop-filter:blur(20px) saturate(1.5);-webkit-backdrop-filter:blur(20px) saturate(1.5);border:1px solid var(--line);box-shadow:var(--shadow)}
+#bar{position:absolute;left:10px;right:10px;bottom:12px;z-index:10;display:flex;align-items:center;gap:8px;transition:transform .28s cubic-bezier(.2,.8,.2,1),opacity .2s}
+body.bar-hidden #bar{transform:translateY(90px);opacity:0;pointer-events:none}
+.rb{width:48px;height:48px;border-radius:17px;display:grid;place-items:center;flex:none;padding:0}
+#tabsBtn{color:var(--accent)}
+.tabs-sq{width:23px;height:23px;border:1.8px solid currentColor;border-radius:7px;display:grid;place-items:center;font:600 11.5px var(--ui);font-variant-numeric:tabular-nums}
+#pill{flex:1;min-width:0;height:48px;border-radius:17px;display:flex;align-items:center;padding:0 3px;position:relative;overflow:hidden}
+#pill.nudge{animation:nudge .3s}
+@keyframes nudge{30%{transform:translateX(-5px)}70%{transform:translateX(4px)}}
+#prog{position:absolute;left:0;bottom:0;height:2.5px;background:var(--accent);width:0;opacity:0;transition:width .2s,opacity .3s}
+#prog.on{opacity:1}
+#pillMid{flex:1;min-width:0;height:100%;border:0;background:none;display:flex;align-items:center;justify-content:center;gap:7px;font:500 15px var(--ui);touch-action:none;padding:0 4px}
+#pillMid.ph{color:var(--muted);font-weight:400}
+.ws-dot{width:7px;height:7px;border-radius:50%;background:var(--accent);flex:none}
+#hostTxt{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ib{border:0;background:none;border-radius:12px;display:grid;place-items:center;width:40px;height:40px;padding:0;color:var(--ink);position:relative;flex:none}
+.ib:active{background:color-mix(in srgb,var(--ink) 8%,transparent)}
+.ib.sm{width:34px;height:34px}
+.ib.on{color:var(--accent);background:color-mix(in srgb,var(--accent) 14%,transparent)}
+#shieldBtn{color:var(--accent)}
+#shieldBtn.off{color:var(--muted)}
+.badge{position:absolute;top:2px;right:0;min-width:17px;height:17px;border-radius:9px;background:var(--accent);color:#fff;font:600 10px/17px var(--ui);padding:0 4px;font-variant-numeric:tabular-nums}
+#notice{position:absolute;left:10px;right:10px;bottom:72px;z-index:11;display:none;align-items:center;gap:8px;border-radius:16px;padding:6px 6px 6px 12px;min-height:46px;animation:pop .2s cubic-bezier(.2,.8,.2,1)}
+#notice.on{display:flex}
+#notice .ic{color:var(--accent)}
+#notice .nt{flex:1;min-width:0;font-size:13.5px;line-height:1.3}
+#notice .nt b{font-weight:600;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#notice .nt small{color:var(--muted);font-size:12px;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+body.bar-hidden #notice{bottom:24px}
+.stop-list{display:grid;gap:4px;margin:8px 0 0}
+.stop{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:12px;background:color-mix(in srgb,var(--ink) 5%,transparent);font-size:13.5px}
+.stop span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.stop .ic{color:var(--muted)}
+.priv-card{background:color-mix(in srgb,var(--accent) 14%,transparent);border:1px solid color-mix(in srgb,var(--accent) 30%,transparent);border-radius:18px;padding:14px 16px;text-align:left;font-size:14px;line-height:1.5;max-width:440px;width:100%;margin:0 0 22px}
+.priv-card b{display:flex;align-items:center;gap:8px;font-size:15.5px;margin-bottom:4px;color:var(--ink)}
+.priv-card b .ic{color:var(--accent)}
+.priv-card span{color:var(--muted)}
+#handle{position:absolute;left:50%;bottom:0;transform:translateX(-50%);width:180px;height:20px;border:0;background:none;z-index:10;display:none;padding:0;touch-action:none}
+#handle i{display:block;width:110px;height:5px;border-radius:3px;margin:9px auto 0;background:color-mix(in srgb,var(--ink) 40%,transparent);box-shadow:0 0 0 1.5px color-mix(in srgb,var(--bg) 70%,transparent)}
+body.bar-hidden #handle{display:block}
+
+/* scrim, sidebar, sheets */
+#scrim{position:absolute;inset:0;z-index:20;background:rgba(10,11,14,.38);opacity:0;pointer-events:none;transition:opacity .25s}
+#scrim.on{opacity:1;pointer-events:auto}
+#sidebar{position:absolute;top:0;bottom:0;left:0;width:86%;max-width:360px;z-index:30;transform:translateX(-104%);transition:transform .3s cubic-bezier(.2,.8,.2,1);background:linear-gradient(180deg,color-mix(in srgb,var(--accent) 17%,var(--bg)) 0%,color-mix(in srgb,var(--accent) 6%,var(--bg)) 45%,var(--bg) 100%);border-right:1px solid var(--line);box-shadow:var(--shadow);touch-action:pan-y;visibility:hidden}
+#sidebar.open{transform:none;visibility:visible}
+.sb-in{height:100%;display:flex;flex-direction:column;padding:16px 14px 14px;gap:14px}
+.sb-in.sw-l{animation:inL .25s}.sb-in.sw-r{animation:inR .25s}
+@keyframes inL{from{transform:translateX(24px);opacity:.3}}
+@keyframes inR{from{transform:translateX(-24px);opacity:.3}}
+.sb-head{display:flex;align-items:center;justify-content:space-between}
+.sb-ws{display:flex;align-items:center;gap:9px;font:600 19px var(--ui);color:var(--accent)}
+.sb-ws span{color:var(--ink)}
+.sb-dots{display:flex;gap:6px}
+.dot{height:34px;border-radius:11px;border:1px solid transparent;background:none;display:flex;align-items:center;gap:6px;color:var(--muted);padding:0 10px;font-size:13px}
+.dot.on{background:var(--surface);border-color:var(--line);color:var(--c);box-shadow:0 2px 8px rgba(0,0,0,.06)}
+.dot.on span{color:var(--ink)}
+.dot:not(.on) span{display:none}
+.sb-ess{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.ess{border:1px solid var(--line);background:color-mix(in srgb,var(--surface) 75%,transparent);border-radius:15px;padding:11px 4px 8px;display:flex;flex-direction:column;align-items:center;gap:6px;font-size:11px;color:var(--muted);min-width:0}
+.ess span{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sb-new{display:flex;align-items:center;gap:10px;border:0;background:none;padding:10px 8px;border-radius:12px;color:var(--muted);font-size:15px;text-align:left}
+.sb-tabs{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:3px;margin-top:-8px;min-height:0}
+.trow{display:flex;align-items:center;border-radius:13px}
+.trow.on{background:var(--surface);box-shadow:0 2px 10px rgba(0,0,0,.06)}
+.trow-main{flex:1;min-width:0;display:flex;align-items:center;gap:11px;border:0;background:none;padding:9px 8px;text-align:left}
+.trow-t{min-width:0;display:flex;flex-direction:column}
+.trow-t b{font-weight:500;font-size:14.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.trow-t small{font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.trow .ib{color:var(--muted)}
+.sb-foot{display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--muted);gap:8px}
+.sb-foot button{border:0;background:none;color:var(--muted);font-size:12.5px;padding:6px}
+.fav{display:grid;place-items:center;border-radius:7px;color:#fff;font-family:var(--ui);font-weight:600;flex:none;line-height:1;overflow:hidden;background-size:cover;background-position:center}
+.fav img{width:100%;height:100%;object-fit:contain;display:block}
+.fav.img{background:var(--surface);border:1px solid var(--line)}
+.fav-lull{background:color-mix(in srgb,var(--accent) 16%,var(--surface));color:var(--accent)}
+
+#sheet{position:absolute;left:8px;right:8px;bottom:8px;max-height:86%;overflow-y:auto;z-index:30;background:var(--surface);border-radius:28px;padding:8px 18px 20px;border:1px solid var(--line);box-shadow:0 -10px 50px rgba(0,0,0,.22);transform:translateY(calc(100% + 20px));transition:transform .3s cubic-bezier(.2,.8,.2,1);visibility:hidden}
+#sheet.open{transform:none;visibility:visible}
+.grab{width:38px;height:5px;border-radius:3px;background:var(--line);margin:2px auto 12px}
+.sh-t{display:flex;align-items:center;gap:10px;font:600 18px var(--ui);margin:4px 0 12px;min-width:0}
+.sh-t span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sh-t .ic{color:var(--accent)}
+.sh-sec{font:600 11.5px var(--ui);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:20px 0 6px}
+.sh-big{font:600 34px var(--ui);margin:0;font-variant-numeric:tabular-nums;color:var(--accent);letter-spacing:-.02em}
+.sh-big small{font-size:15px;color:var(--muted);font-weight:500;letter-spacing:0;margin-left:6px}
+.row{display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid var(--line)}
+.row:last-child{border-bottom:0}
+.row>div{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.row b{font-weight:500;font-size:15px}
+.row small{color:var(--muted);font-size:12.5px;line-height:1.4}
+.sw{width:46px;height:28px;border-radius:15px;border:0;background:color-mix(in srgb,var(--ink) 18%,transparent);position:relative;flex:none;padding:0;transition:background .2s}
+.sw i{position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.25);transition:transform .2s}
+.sw.on{background:var(--accent)}
+.sw.on i{transform:translateX(18px)}
+.btn{border:1px solid var(--line);background:var(--surface);border-radius:13px;padding:10px 16px;font:500 14.5px var(--ui);color:var(--ink)}
+.btn.pri{background:var(--accent);color:#fff;border-color:transparent}
+.btn.sm{padding:7px 12px;font-size:13.5px;border-radius:10px}
+.btn.ghost{background:none}
+.btn.danger{color:#C2413A}
+.mn-nav{display:flex;justify-content:space-around;padding:0 0 10px;border-bottom:1px solid var(--line)}
+.mn-nav .ib{width:52px;height:46px}
+.mn-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:14px 0 4px}
+.tile{border:1px solid var(--line);background:none;border-radius:18px;padding:13px 6px 11px;display:flex;flex-direction:column;align-items:center;gap:6px;font-size:13px;text-align:center}
+.tile small{font-size:11.5px;color:var(--muted);font-variant-numeric:tabular-nums}
+.tile .ic{color:var(--accent)}
+.tile.on{background:color-mix(in srgb,var(--accent) 12%,transparent);border-color:color-mix(in srgb,var(--accent) 35%,transparent)}
+.rd-row{display:flex;align-items:center;gap:8px;margin-top:10px;padding:10px 12px;border-radius:14px;background:color-mix(in srgb,var(--accent) 8%,transparent)}
+.rd-row span{flex:1;font-size:14px}
+.fc-card{background:color-mix(in srgb,var(--accent) 9%,transparent);border-radius:18px;padding:16px}
+.fc-card p{margin:0 0 12px;line-height:1.45}
+.fc-btns{display:flex;gap:8px}
+.fc-btns .btn{flex:1}
+.lim{padding:12px 0;border-bottom:1px solid var(--line);display:grid;gap:8px}
+.lim-top{display:flex;align-items:center;gap:10px}
+.lim-top b{font-weight:500;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.lim-top span{font-size:12.5px;font-variant-numeric:tabular-nums}
+.lim-bar{height:5px;border-radius:3px;background:color-mix(in srgb,var(--ink) 9%,transparent);overflow:hidden}
+.lim-bar i{display:block;height:100%;background:var(--accent);border-radius:3px}
+.lim-ctl{display:flex;gap:6px}
+.lim-ctl .btn:last-child{margin-left:auto}
+.field{width:100%;min-width:0;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:13px;padding:11px 12px;font:16px var(--ui)}
+.flabel{display:block;font-size:13px;color:var(--muted);margin:12px 0 6px}
+.lim-add{display:flex;gap:8px;margin-top:14px}
+.lim-add .field:first-child{flex:1}
+.lim-add .field.num{width:76px;flex:none}
+.opt{display:flex;align-items:center;gap:12px;width:100%;border:0;background:none;padding:11px 2px;border-bottom:1px solid var(--line);text-align:left;font-size:15px}
+.opt i{width:20px;height:20px;border-radius:50%;border:2px solid var(--line);flex:none}
+.opt.on i{border:6px solid var(--accent)}
+.seg{display:flex;background:color-mix(in srgb,var(--ink) 7%,transparent);border-radius:12px;padding:3px}
+.seg button{flex:1;border:0;background:none;border-radius:10px;padding:8px;font-size:14px;color:var(--muted)}
+.seg button.on{background:var(--surface);color:var(--ink);box-shadow:0 1px 4px rgba(0,0,0,.08)}
+.btnrow{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px}
+.btnrow .btn{flex:1}
+
+/* address editing */
+#ue{position:absolute;inset:0;z-index:40;background:var(--bg);display:none;flex-direction:column;padding:12px}
+#ue.on{display:flex}
+.ue-top{display:flex;gap:8px;align-items:center;margin:0}
+.ue-field{flex:1;display:flex;align-items:center;gap:8px;background:var(--surface);border:1.5px solid var(--accent);border-radius:16px;padding:0 6px 0 12px;height:50px;min-width:0}
+.ue-field .ic{color:var(--muted)}
+.ue-field input{flex:1;min-width:0;border:0;background:none;outline:none;font:16px var(--ui);color:var(--ink)}
+.ue-top>button{border:0;background:none;color:var(--accent);font-weight:500;padding:8px 4px}
+.ue-list{flex:1;overflow-y:auto;margin-top:8px}
+.sg-h{font:600 11.5px var(--ui);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:16px 6px 6px}
+.sg{display:flex;align-items:center;gap:12px;width:100%;border:0;background:none;padding:10px 6px;border-radius:12px;text-align:left}
+.sg:active{background:color-mix(in srgb,var(--ink) 6%,transparent)}
+.sg span{min-width:0;display:flex;flex-direction:column}
+.sg b{font-weight:500;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sg small{color:var(--muted);font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sg>.ic{color:var(--muted);width:22px}
+
+/* glance */
+#glance{position:absolute;left:10px;right:10px;top:34px;bottom:22px;z-index:25;display:none}
+#glance.on{display:block;animation:pop .2s cubic-bezier(.2,.8,.2,1)}
+@keyframes pop{from{transform:scale(.95);opacity:0}}
+.gl-card{height:100%;background:var(--surface);border-radius:20px;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.4);border:1px solid var(--line)}
+.gl-head{display:flex;align-items:center;gap:6px;padding:8px 6px 8px 14px;height:56px;flex:none}
+.gl-t{flex:1;min-width:0;display:flex;flex-direction:column}
+.gl-t b{font-weight:500;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gl-t small{font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gl-body{flex:1;border-radius:0 0 19px 19px;background:color-mix(in srgb,var(--ink) 4%,var(--surface));display:grid;place-items:center;color:var(--muted);font-size:13px}
+
+/* how to use */
+#help{position:absolute;inset:0;z-index:45;background:var(--bg);display:none;flex-direction:column}
+#help.on{display:flex}
+.hp-top{display:flex;align-items:center;gap:6px;padding:10px 10px 6px;flex:none}
+.hp-top h2{font:600 19px var(--ui);margin:0;flex:1}
+.hp-body{flex:1;overflow-y:auto;padding:4px 20px 30px;-webkit-user-select:text;user-select:text}
+.hp-hero{display:flex;align-items:center;gap:14px;margin:6px 0 18px}
+.hp-hero .fav{border-radius:16px}
+.hp-hero h1{font:600 24px/1.15 var(--ui);margin:0}
+.hp-hero p{margin:4px 0 0;color:var(--muted);font-size:14.5px;line-height:1.4}
+.hp-sec{background:var(--surface);border:1px solid var(--line);border-radius:20px;padding:16px;margin-bottom:12px}
+.hp-sec h3{display:flex;align-items:center;gap:10px;font:600 16.5px var(--ui);margin:0 0 8px}
+.hp-sec h3 .n{width:26px;height:26px;border-radius:9px;background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent);display:grid;place-items:center;font-size:13.5px;flex:none}
+.hp-sec p{margin:0 0 8px;font-size:15px;line-height:1.5}
+.hp-sec p:last-child{margin-bottom:0}
+.hp-sec ol{margin:0;padding-left:20px;font-size:15px;line-height:1.5}
+.hp-sec li{margin-bottom:4px}
+.hp-sec b{font-weight:600}
+.hp-dia{margin:6px 0 12px;background:var(--bg);border-radius:16px;padding:14px 10px 10px}
+.hp-dia svg{width:100%;height:auto;display:block}
+.hp-legend{list-style:none;padding:0;margin:10px 0 0;display:grid;gap:7px;font-size:14.5px;line-height:1.4}
+.hp-legend li{display:grid;grid-template-columns:24px 1fr;gap:8px;align-items:start}
+.hp-legend .n{width:22px;height:22px;border-radius:50%;background:var(--accent);color:#fff;font-size:12px;font-weight:600;display:grid;place-items:center}
+.key{display:inline-flex;align-items:center;gap:4px;border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:1px 7px;font-size:13.5px;white-space:nowrap;vertical-align:1px}
+.key .ic{color:var(--accent)}
+.hp-foot{padding:10px 20px 16px;flex:none}
+.hp-foot .btn{width:100%;padding:14px}
+
+/* new tab page */
+.start{min-height:100%;display:flex;flex-direction:column;align-items:center;padding:13% 20px 20px;text-align:center}
+.st-clock{font:300 64px/1 var(--ui);letter-spacing:-.03em;font-variant-numeric:tabular-nums}
+.st-date{color:var(--muted);margin:8px 0 26px;font-size:14.5px}
+.st-search{width:100%;max-width:440px;height:52px;border-radius:18px;border:1px solid var(--line);background:var(--surface);display:flex;align-items:center;gap:10px;padding:0 16px;color:var(--muted);font-size:15.5px;box-shadow:0 2px 12px rgba(0,0,0,.04)}
+.st-favs{display:grid;grid-template-columns:repeat(4,1fr);gap:20px 10px;margin:30px 0 0;width:100%;max-width:400px}
+.st-favs button{border:0;background:none;display:flex;flex-direction:column;align-items:center;gap:7px;font-size:12.5px;color:var(--ink);padding:0;min-width:0;touch-action:manipulation}
+.st-favs button span{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.st-favs .fav{border-radius:16px;box-shadow:0 3px 10px rgba(0,0,0,.08)}
+.st-favs .add .fav{background:none;border:1.5px dashed color-mix(in srgb,var(--ink) 25%,transparent);color:var(--muted);box-shadow:none}
+.st-favs .add span{color:var(--muted)}
+.st-tip{font-size:12.5px;color:var(--muted);margin:16px 0 0}
+.st-foot{margin-top:auto;padding-top:34px;display:flex;flex-direction:column;align-items:center;gap:10px}
+.st-foot .btn{display:flex;align-items:center;gap:8px;border-radius:20px}
+.st-foot .btn .ic{color:var(--accent)}
+.st-quiet{font-size:12.5px;color:var(--muted);margin:0;font-variant-numeric:tabular-nums}
+.linkbtn{border:0;background:none;color:var(--accent);font-size:14px;padding:6px;display:flex;align-items:center;gap:6px}
+.paused{min-height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:30px 28px;gap:12px}
+.paused .fav{filter:grayscale(1);opacity:.6;border-radius:15px}
+.paused h2{font:600 24px var(--ui);margin:8px 0 0;text-wrap:balance;word-break:break-word}
+.paused p{color:var(--muted);margin:0;line-height:1.5;max-width:290px;font-variant-numeric:tabular-nums}
+.pz-btns{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;justify-content:center}
+
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body class="">
+<div id="screen"></div>
+<div id="bar">
+  <button class="rb glass" id="tabsBtn" data-act="tabs" aria-label="Tabs and spaces"><span class="tabs-sq"><span class="tabs-n">1</span></span></button>
+  <div id="pill" class="glass">
+    <button class="ib" id="shieldBtn" data-act="shield" aria-label="Blocking"></button>
+    <button id="pillMid" aria-label="Address. Tap to search, swipe sideways to change tab, swipe up for all tabs"><span class="ws-dot"></span><span id="hostTxt"></span></button>
+    <button class="ib" id="readerBtn" data-act="reader" aria-label="Reader view"></button>
+    <i id="prog"></i>
+  </div>
+  <button class="rb glass" id="menuBtn" data-act="menu" aria-label="Menu"></button>
+</div>
+<div id="notice" class="glass" role="status"></div>
+<button id="handle" aria-label="Show the bar"><i></i></button>
+<div id="scrim"></div>
+<nav id="sidebar" aria-label="Tabs and spaces"></nav>
+<div id="glance" role="dialog" aria-label="Link preview"></div>
+<section id="sheet" role="dialog" aria-modal="true"></section>
+<div id="ue" role="dialog" aria-label="Search or type a web address">
+  <form class="ue-top" data-form="ue">
+    <label class="ue-field" for="ueIn"><span id="ueIcon"></span><input id="ueIn" type="text" inputmode="url" enterkeyhint="go" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Search or type a web address"><button type="button" class="ib sm" id="ueClear" aria-label="Clear"></button></label>
+    <button type="button" data-act="ue-cancel">Cancel</button>
+  </form>
+  <div class="ue-list" id="ueList"></div>
+</div>
+<div id="help" role="dialog" aria-label="How to use Lull"></div>
+
+<script>
+(function(){
+'use strict';
+const $=s=>document.querySelector(s);
+const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+/* ---------- native bridge (with a stand-in for testing in a desktop browser) ---------- */
+const N=window.LullNative||(function(){const calls=[];window.__calls=calls;const log=(n)=>(...a)=>{calls.push([n,...a]);return''};let st='';
+ return{load:()=>st,save:j=>{st=j;calls.push(['save'])},night:()=>false,version:()=>'dev',ready:log('ready'),show:log('show'),open:log('open'),close:log('close'),nav:log('nav'),mode:log('mode'),watchScroll:log('watchScroll'),blocking:log('blocking'),glance:log('glance'),glanceClose:log('glanceClose'),glanceUrl:()=>'',share:log('share'),copy:log('copy'),toast:log('toast'),bars:log('bars'),reader:log('reader'),readerSize:log('readerSize'),clearData:log('clearData'),keyboard:log('keyboard'),openPrivate:log('openPrivate'),closePrivate:log('closePrivate'),isPrivate:()=>/private=1/.test(location.search),exit:log('exit')}})();
+
+/* ---------- icons ---------- */
+const I={
+ shield:'<path d="M12 3.5l7 2.8v4.9c0 4.3-2.9 7.9-7 9.6-4.1-1.7-7-5.3-7-9.6V6.3z"/>',
+ shieldOff:'<path d="M12 3.5l7 2.8v4.9c0 4.3-2.9 7.9-7 9.6-4.1-1.7-7-5.3-7-9.6V6.3z"/><path d="M4.5 4.5l15 15"/>',
+ reader:'<path d="M6 6.5h12M6 10.5h12M6 14.5h8M6 18.5h10"/>',
+ dots:'<circle cx="6" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="18" cy="12" r="1.4" fill="currentColor" stroke="none"/>',
+ plus:'<path d="M12 5v14M5 12h14"/>',
+ x:'<path d="M7 7l10 10M17 7L7 17"/>',
+ back:'<path d="M14.5 6l-6 6 6 6"/>',
+ fwd:'<path d="M9.5 6l6 6-6 6"/>',
+ reload:'<path d="M18.5 12a6.5 6.5 0 1 1-1.9-4.6"/><path d="M18 4.5V8h-3.5"/>',
+ stop:'<path d="M7 7l10 10M17 7L7 17"/>',
+ share:'<path d="M12 4v11M7.5 8.5L12 4l4.5 4.5"/><path d="M5.5 13v6h13v-6"/>',
+ copy:'<rect x="8" y="8" width="11" height="11" rx="2.5"/><path d="M5 15.5V6.5A1.5 1.5 0 0 1 6.5 5h9"/>',
+ focus:'<circle cx="12" cy="12" r="7.5"/><circle cx="12" cy="12" r="2.8"/>',
+ compact:'<rect x="4" y="4.5" width="16" height="15" rx="3.5"/><path d="M9 16.5h6"/>',
+ gear:'<circle cx="12" cy="12" r="3"/><path d="M12 3.5v2.2M12 18.3v2.2M3.5 12h2.2M18.3 12h2.2M6 6l1.6 1.6M16.4 16.4L18 18M6 18l1.6-1.6M16.4 7.6L18 6"/>',
+ help:'<circle cx="12" cy="12" r="8"/><path d="M9.8 9.6a2.3 2.3 0 1 1 3.2 2.1c-.7.3-1 .8-1 1.5v.3"/><circle cx="12" cy="16.4" r=".7" fill="currentColor"/>',
+ search:'<circle cx="11" cy="11" r="6"/><path d="M19.5 19.5l-4.2-4.2"/>',
+ globe:'<circle cx="12" cy="12" r="8"/><path d="M4 12h16M12 4c2.2 2.3 3.2 5 3.2 8s-1 5.7-3.2 8c-2.2-2.3-3.2-5-3.2-8s1-5.7 3.2-8z"/>',
+ clock:'<circle cx="12" cy="12" r="8"/><path d="M12 7.5V12l3 2"/>',
+ star:'<path d="M12 4.5l2.3 4.7 5.2.8-3.8 3.6.9 5.1-4.6-2.4-4.6 2.4.9-5.1L4.5 10l5.2-.8z"/>',
+ starOn:'<path d="M12 4.5l2.3 4.7 5.2.8-3.8 3.6.9 5.1-4.6-2.4-4.6 2.4.9-5.1L4.5 10l5.2-.8z" fill="currentColor"/>',
+ swipe:'<path d="M5 12h14M15 8l4 4-4 4M9 8l-4 4 4 4"/>',
+ up:'<path d="M12 19V6M7.5 10.5L12 6l4.5 4.5"/>',
+ eye:'<path d="M2.5 12S6 5.8 12 5.8 21.5 12 21.5 12 18 18.2 12 18.2 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="2.6"/>',
+ open:'<path d="M14 5h5v5M19 5l-8 8"/><path d="M17 13.5V19H5V7h5.5"/>',
+ personal:'<circle cx="12" cy="12" r="6.5"/>',
+ dev:'<path d="M9 7.5L4.5 12 9 16.5M15 7.5l4.5 4.5-4.5 4.5"/>',
+ reading:'<path d="M4.5 6.2c3-1 5.5-.6 7.5 1 2-1.6 4.5-2 7.5-1v11.6c-3-1-5.5-.6-7.5 1-2-1.6-4.5-2-7.5-1z"/><path d="M12 7.2v11.6"/>',
+ mask:'<path d="M3.5 9.5c0-1.4 1.1-2.5 2.5-2.5h12c1.4 0 2.5 1.1 2.5 2.5v1.2c0 3-2.2 5.3-4.6 5.3-1.6 0-2.4-1-3.9-1s-2.3 1-3.9 1c-2.4 0-4.6-2.3-4.6-5.3z"/><circle cx="8.3" cy="11.2" r="1.3"/><circle cx="15.7" cy="11.2" r="1.3"/>',
+ redirect:'<path d="M4 17V11a4 4 0 0 1 4-4h11"/><path d="M15 3.5L19 7l-4 3.5"/><path d="M4 21l5-5M9 21l-5-5" />',
+ popup:'<rect x="3.5" y="5" width="17" height="14" rx="2.5"/><path d="M3.5 9h17"/><path d="M9.5 12.5l5 5M14.5 12.5l-5 5"/>',
+ trash:'<path d="M5 7h14M10 7V5h4v2M7 7l1 12h8l1-12"/>'
+};
+const ic=(n,s=20)=>`<svg class="ic" width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${I[n]}</svg>`;
+const logo=s=>`<svg class="ic" width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M4.2 13.4h15.6a8 8 0 0 1-15.6 0z" fill="currentColor"/></svg>`;
+
+/* ---------- constants ---------- */
+const PRIV=(()=>{try{return !!N.isPrivate()}catch(e){return /private=1/.test(location.search)}})();
+const WS=PRIV?[{id:'private',name:'Private',icon:'mask',light:'#A994FF',dark:'#A994FF'}]:[
+ {id:'personal',name:'Personal',icon:'personal',light:'#3D7A80',dark:'#7DBDC3'},
+ {id:'dev',name:'Dev',icon:'dev',light:'#6A55C6',dark:'#AC9CF2'},
+ {id:'reading',name:'Reading',icon:'reading',light:'#A0652A',dark:'#E2A86C'}];
+const ENGINES={ddg:['DuckDuckGo','https://duckduckgo.com/?q='],google:['Google','https://www.google.com/search?q='],bing:['Bing','https://www.bing.com/search?q='],brave:['Brave Search','https://search.brave.com/search?q='],ecosia:['Ecosia','https://www.ecosia.org/search?q='],startpage:['Startpage','https://www.startpage.com/do/search?q=']};
+const START='lull:start';
+const TILE_COLORS=['#3D7A80','#6A55C6','#A0652A','#4E6E9E','#8A4F7D','#4F7F52','#9A5B4E','#5C6670'];
+
+/* ---------- state ---------- */
+function defaults(){return{v:1,activeWs:'personal',
+ tabs:[{id:'t1',ws:'personal',url:START,title:'New tab'},{id:'t2',ws:'dev',url:START,title:'New tab'},{id:'t3',ws:'reading',url:START,title:'New tab'}],
+ active:{personal:'t1',dev:'t2',reading:'t3'},
+ favs:[{url:'https://www.wikipedia.org',name:'Wikipedia'},{url:'https://github.com',name:'GitHub'},{url:'https://itch.io',name:'itch.io'},{url:'https://dev.epicgames.com/documentation/en-us/unreal-engine',name:'Unreal Docs'}],
+ icons:{},hist:[],compact:false,theme:'system',engine:'ddg',bgAudio:true,
+ block:{ads:true,cookies:true,autoplay:true,popups:true,redirects:true,youtube:true},allow:[],
+ limits:[],usage:{day:'',secs:{}},session:0,readerSize:19,week:{k:0,n:0},seenHelp:false}}
+let S;
+try{S=JSON.parse(N.load()||'null')}catch(e){S=null}
+if(!S||S.v!==1)S=defaults();
+S=Object.assign(defaults(),S);S.block=Object.assign(defaults().block,S.block||{});
+if(PRIV){S=Object.assign(S,{activeWs:'private',tabs:[{id:'p1',ws:'private',url:START,title:'New tab'}],active:{private:'p1'},hist:[],seenHelp:true,week:{k:0,n:0}})}
+let saveT=null;
+function save(){if(PRIV)return;clearTimeout(saveT);saveT=setTimeout(()=>{try{N.save(JSON.stringify(S))}catch(e){}},250)}
+function saveNow(){if(PRIV)return;clearTimeout(saveT);try{N.save(JSON.stringify(S))}catch(e){}}
+
+const eph={};
+const E=id=>eph[id]||(eph[id]={canBack:false,canFwd:false,loading:false,progress:0,blocked:0,reader:false,paused:null,stops:[]});
+const curWs=()=>WS.find(w=>w.id===S.activeWs)||WS[0];
+const wsTabs=ws=>S.tabs.filter(t=>t.ws===(ws||S.activeWs));
+let tabSeq=Date.now();
+function mkTab(url,ws){const t={id:'t'+(tabSeq++).toString(36),ws:ws||S.activeWs,url:url||START,title:url?'':'New tab'};S.tabs.push(t);return t}
+function cur(){let t=S.tabs.find(x=>x.id===S.active[S.activeWs]&&x.ws===S.activeWs);if(!t){t=wsTabs()[0]||mkTab(START);S.active[S.activeWs]=t.id}return t}
+
+/* ---------- urls ---------- */
+function hostOf(u){try{if(!/^https?:/i.test(u))return'';return new URL(u).hostname.toLowerCase()}catch(e){return''}}
+const bare=h=>(h||'').replace(/^www\./,'');
+function toUrl(q){q=q.trim();if(!q)return'';
+ if(/^(https?|about|data|file):/i.test(q))return q;
+ if(/^[^\s\/]+\.[a-z]{2,}(:\d+)?(\/\S*)?$/i.test(q)||/^localhost(:\d+)?(\/\S*)?$/i.test(q)||/^\d+\.\d+\.\d+\.\d+(:\d+)?(\/\S*)?$/.test(q))return'https://'+q;
+ return(ENGINES[S.engine]||ENGINES.ddg)[1]+encodeURIComponent(q)}
+function searchQuery(u){for(const k in ENGINES){const p=ENGINES[k][1];if(u.startsWith(p)){try{return decodeURIComponent(u.slice(p.length).split('&')[0].replace(/\+/g,' '))}catch(e){return null}}}return null}
+function niceTitle(t){if(t.url===START)return'New tab';const q=searchQuery(t.url);if(q!=null&&!t.title)return q;return t.title||bare(hostOf(t.url))||t.url}
+function hashCol(h){let x=0;for(const c of h)x=(x*31+c.charCodeAt(0))|0;return TILE_COLORS[Math.abs(x)%TILE_COLORS.length]}
+function iconFor(url){const h=bare(hostOf(url));return S.icons[h]||null}
+function fav(url,sz,label){sz=sz||22;if(url===START)return`<span class="fav fav-lull" style="width:${sz}px;height:${sz}px;border-radius:${Math.round(sz*.3)}px">${logo(Math.round(sz*.72))}</span>`;
+ const h=bare(hostOf(url));const im=S.icons[h];const r=Math.round(sz*.3);
+ if(im)return`<span class="fav img" style="width:${sz}px;height:${sz}px;border-radius:${r}px;padding:${Math.round(sz*.14)}px"><img src="${im}" alt=""></span>`;
+ const letter=((label||h||'?').replace(/^www\./,'')[0]||'?').toUpperCase();
+ return`<span class="fav" style="width:${sz}px;height:${sz}px;background:${hashCol(h||label||'')};font-size:${Math.round(sz*.48)}px;border-radius:${r}px">${esc(letter)}</span>`}
+
+/* ---------- theme ---------- */
+let night=false;try{night=!!N.night()}catch(e){}
+const isDark=()=>PRIV||S.theme==='dark'||(S.theme==='system'&&night);
+const accent=w=>isDark()?w.dark:w.light;
+function applyTheme(){const d=isDark();document.documentElement.classList.toggle('dark',d);document.documentElement.classList.toggle('priv',PRIV);document.documentElement.style.setProperty('--accent',accent(curWs()));N.bars(PRIV?'#17141F':d?'#121316':'#F3F3F1',!d)}
+
+/* ---------- day / focus ---------- */
+const today=()=>{const d=new Date();return d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate()};
+const weekKey=()=>Math.floor((Date.now()/864e5+3)/7);
+function usage(){if(S.usage.day!==today())S.usage={day:today(),secs:{}};return S.usage.secs}
+function limitFor(h){h=bare(h);if(!h)return null;return S.limits.find(l=>h===l.host||h.endsWith('.'+l.host))||null}
+const sessionLeft=()=>Math.max(0,(S.session||0)-Date.now());
+function focusBlocked(url){const l=limitFor(hostOf(url));if(!l)return null;if(sessionLeft()>0)return'session';if((usage()[l.host]||0)>=l.min*60)return'limit';return null}
+const fmt=ms=>{const s=Math.ceil(ms/1000);return Math.floor(s/60)+':'+String(s%60).padStart(2,'0')};
+
+/* ---------- layout: how much of the screen this layer covers ---------- */
+let sidebarOpen=false,sheetKind=null,ueOpen=false,glanceOpen=false,helpOpen=false,barShown=true;
+const screenShown=()=>{const t=cur();return t.url===START||!!E(t.id).paused};
+const needFull=()=>sidebarOpen||!!sheetKind||ueOpen||glanceOpen||helpOpen||screenShown();
+const BAR=76;
+let noticeOn=false;
+const barH=()=>(S.compact?(barShown?BAR:20):BAR)+(noticeOn?58:0);
+const insetH=()=>S.compact?0:BAR;
+let lastMode='',modeT=null,lastBarH=BAR;
+function syncMode(){const full=needFull();const key=full?'full':'bar:'+barH()+':'+insetH();clearTimeout(modeT);
+ const apply=()=>{if(key===lastMode)return;lastMode=key;lastBarH=full?9999:barH();N.mode(full,barH(),insetH())};
+ if(full||barH()>=lastBarH)apply();else modeT=setTimeout(apply,320)}
+const later=f=>setTimeout(f,60);
+
+/* ---------- rendering ---------- */
+function renderBar(){const t=cur(),e=E(t.id);
+ $('.tabs-n').textContent=wsTabs().length;
+ const web=t.url!==START&&!e.paused;const h=bare(hostOf(t.url));const allowed=web&&isAllowedHost(h);
+ const tot=(e.blocked||0)+e.stops.length;const sb=$('#shieldBtn');sb.innerHTML=ic(allowed?'shieldOff':'shield')+(web&&tot&&!allowed?`<span class="badge">${tot>99?'99+':tot}</span>`:'');
+ sb.classList.toggle('off',!web||allowed||!S.block.ads);
+ sb.setAttribute('aria-label',web&&e.blocked?`Blocking: ${e.blocked} blocked on this page`:'Blocking');
+ const q=web?searchQuery(t.url):null;
+ $('.ws-dot').style.display=PRIV?'none':'';$('#pillMid').classList.toggle('privpill',PRIV);$('#hostTxt').innerHTML=(PRIV?ic('mask',16).replace('class="ic"','class="ic" style="color:var(--accent)"'):'')+esc(!web?(e.paused?bare(hostOf(e.paused)):'Search or type a site'):(q!=null?q:(h||t.url)));
+ $('#pillMid').classList.toggle('ph',!web&&!e.paused);
+ const rb=$('#readerBtn');rb.innerHTML=ic('reader');rb.style.visibility=web?'visible':'hidden';rb.classList.toggle('on',e.reader);rb.setAttribute('aria-pressed',e.reader);
+ $('#menuBtn').innerHTML=ic('dots');
+ const pg=$('#prog');pg.classList.toggle('on',web&&e.loading);pg.style.width=(web&&e.loading?Math.max(8,e.progress):0)+'%'}
+function isAllowedHost(h){h=bare(h);return S.allow.some(a=>h===a||h.endsWith('.'+a))}
+
+function renderScreen(){const t=cur(),e=E(t.id),el=$('#screen');
+ if(t.url===START&&!e.paused){el.innerHTML=startHTML();el.classList.add('on')}
+ else if(e.paused){el.innerHTML=pausedHTML(e.paused);el.classList.add('on')}
+ else{el.classList.remove('on');el.innerHTML=''}}
+function startHTML(){const now=new Date();const left=sessionLeft();if(S.week.k!==weekKey())S.week={k:weekKey(),n:0};
+ if(PRIV)return`<div class="start"><div class="st-clock" data-clock>${clock(now)}</div><div class="st-date">Private tabs</div>
+ <div class="priv-card"><b>${ic('mask',20)}You're browsing privately</b><span>Lull doesn't save history from these tabs, and deletes their cookies, logins and site data when you close the private window. Websites and your network can still see what you do. Downloads stay on your phone.</span></div>
+ <button class="st-search" data-act="url">${ic('search',18)}Search privately or type an address</button>
+ <div class="st-favs">${S.favs.map((f,i)=>`<button data-fav="${i}" aria-label="${esc(f.name)}">${fav(f.url,56,f.name)}<span>${esc(f.name)}</span></button>`).join('')}</div>
+ <div class="st-foot"><button class="btn" data-act="close-private">${ic('x',16)}Close private tabs</button><button class="linkbtn" data-act="help">${ic('help',16)}How to use Lull</button></div></div>`;
+ return`<div class="start"><div class="st-clock" data-clock>${clock(now)}</div><div class="st-date">${now.toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long'})} · ${curWs().name}</div>
+ <button class="st-search" data-act="url">${ic('search',18)}Search or type a web address</button>
+ <div class="st-favs" id="favGrid">${S.favs.map((f,i)=>`<button data-fav="${i}" aria-label="${esc(f.name)}. Press and hold to edit">${fav(f.url,56,f.name)}<span>${esc(f.name)}</span></button>`).join('')}<button class="add" data-act="fav-new" aria-label="Add a favourite">${`<span class="fav" style="width:56px;height:56px">${ic('plus',24)}</span>`}<span>Add</span></button></div>
+ <p class="st-tip">${S.favs.length?'Press and hold a favourite to rename, move or remove it.':'Add the sites you visit most.'}</p>
+ <div class="st-foot">${left?`<button class="btn" data-act="focus">${ic('focus',16)}Focus · <span data-left>${fmt(left)}</span> left</button>`:''}
+ <p class="st-quiet">${S.week.n.toLocaleString('en-GB')} ads and trackers blocked this week</p>
+ <button class="linkbtn" data-act="help">${ic('help',16)}How to use Lull</button></div></div>`}
+function pausedHTML(u){const h=bare(hostOf(u));const l=limitFor(h);const why=focusBlocked(u)||'limit';
+ return`<div class="paused">${fav(u,52)}<h2>${esc(h)} is paused</h2><p>${why==='session'?`You're in a focus session. <span data-left>${fmt(sessionLeft())}</span> to go.`:`You've used your ${l?l.min:0} minutes for today. It opens again tomorrow.`}</p>
+ <div class="pz-btns"><button class="btn pri" data-act="pz-back">Go back</button>${why==='limit'?`<button class="btn ghost" data-act="pz-more">5 more minutes</button>`:`<button class="btn ghost" data-act="session-end">End session</button>`}</div></div>`}
+const clock=d=>d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
+
+function tabRow(t){const on=t.id===cur().id;const sub=t.url===START?'Lull':(bare(hostOf(t.url))||t.url);
+ return`<div class="trow ${on?'on':''}"><button class="trow-main" data-act="tab:${t.id}">${fav(t.url,22,niceTitle(t))}<span class="trow-t"><b>${esc(niceTitle(t))}</b><small>${esc(sub)}</small></span></button><button class="ib sm" data-act="close:${t.id}" aria-label="Close ${esc(niceTitle(t))}">${ic('x',16)}</button></div>`}
+function renderSidebar(anim){const w=curWs();
+ $('#sidebar').innerHTML=`<div class="sb-in ${anim||''}"><div class="sb-head"><div class="sb-ws">${ic(w.icon,22)}<span>${w.name}</span></div><button class="ib" data-act="sb-close" aria-label="Close">${ic('x')}</button></div>
+ ${PRIV?'':`<div class="sb-dots">`}${PRIV?'':WS.map(x=>`<button class="dot ${x.id===w.id?'on':''}" data-act="ws:${x.id}" aria-label="${x.name} space" aria-pressed="${x.id===w.id}" style="--c:${accent(x)}">${ic(x.icon,17)}<span>${x.name}</span></button>`).join('')}${PRIV?'':'</div>'}
+ ${S.favs.length?`<div class="sb-ess">${S.favs.slice(0,8).map((f,i)=>`<button class="ess" data-act="sbfav:${i}">${fav(f.url,26,f.name)}<span>${esc(f.name)}</span></button>`).join('')}</div>`:''}
+ <button class="sb-new" data-act="newtab">${ic('plus',18)}New tab</button>
+ <div class="sb-tabs">${wsTabs().map(tabRow).join('')}</div>
+ <div class="sb-foot"><span>${PRIV?'Private tabs are deleted when you close them':'Swipe sideways to change space'}</span><button data-act="closeall">Close all</button></div></div>`}
+
+/* ---------- show the current tab ---------- */
+function showCurrent(){const t=cur(),e=E(t.id);
+ if(t.url===START||e.paused)N.show('','');else N.show(t.id,t.url);
+ renderScreen();renderBar();if(sidebarOpen)renderSidebar();if(S.compact&&screenShown()&&!barShown)setBarShown(true);syncMode();applyTheme()}
+function navigate(input,t){t=t||cur();const url=toUrl(input);if(!url)return;const e=E(t.id);
+ e.reader=false;e.paused=null;t.url=url;t.title='';
+ if(focusBlocked(url)){e.paused=url;N.nav(t.id,'stop');}
+ else{e.loading=true;e.progress=5;N.open(t.id,url)}
+ save();if(t.id===cur().id){renderScreen();renderBar();syncMode()}}
+function selectTab(id,anim){const t=S.tabs.find(x=>x.id===id);if(!t)return;const change=t.ws!==S.activeWs;S.activeWs=t.ws;S.active[t.ws]=id;save();showCurrent();if(change)N.toast(curWs().name+' space')}
+function switchBy(d){const ts=wsTabs(),i=ts.findIndex(t=>t.id===cur().id),n=i+d;if(n<0||n>=ts.length){const p=$('#pill');p.classList.remove('nudge');void p.offsetWidth;p.classList.add('nudge');return}selectTab(ts[n].id)}
+function switchWs(id,anim){if(id===S.activeWs)return;S.activeWs=id;cur();save();showCurrent();if(sidebarOpen)renderSidebar(anim)}
+function wsBy(d){const i=WS.findIndex(w=>w.id===S.activeWs),n=(i+d+WS.length)%WS.length;switchWs(WS[n].id,d>0?'sw-l':'sw-r')}
+function newTab(url){const t=mkTab(START);S.active[S.activeWs]=t.id;save();if(url){t.url=url;const e=E(t.id);if(focusBlocked(url))e.paused=url;else{e.loading=true;N.open(t.id,url)}}showCurrent();return t}
+function closeTab(id){const i=S.tabs.findIndex(t=>t.id===id);if(i<0)return;const t=S.tabs[i];const list=wsTabs(t.ws);const li=list.findIndex(x=>x.id===id);
+ S.tabs.splice(i,1);delete eph[id];N.close(id);
+ if(S.active[t.ws]===id){const rest=wsTabs(t.ws);const nx=rest[Math.min(li,rest.length-1)];S.active[t.ws]=nx?nx.id:mkTab(START,t.ws).id}
+ save();showCurrent()}
+function closeAll(){wsTabs().forEach(t=>{N.close(t.id);delete eph[t.id]});S.tabs=S.tabs.filter(t=>t.ws!==S.activeWs);const t=mkTab(START);S.active[S.activeWs]=t.id;save();showCurrent();N.toast('Closed all tabs in '+curWs().name)}
+function openFavInSpace(i){const f=S.favs[i];if(!f)return;const h=bare(hostOf(f.url));const ex=wsTabs().find(t=>bare(hostOf(t.url))===h);closeSidebar();if(ex)selectTab(ex.id);else{const c=cur();if(c.url===START)navigate(f.url,c);else newTab(f.url)}}
+
+/* ---------- bar in compact mode ---------- */
+let hideT=null;
+function applyCompact(){document.body.classList.toggle('compact',S.compact);setBarShown(!S.compact)}
+function setBarShown(v){barShown=v||!S.compact;document.body.classList.toggle('bar-hidden',!barShown);clearTimeout(hideT);N.watchScroll(S.compact&&barShown);
+ if(S.compact&&barShown)hideT=setTimeout(()=>{if(!needFull())setBarShown(false)},4000);
+ syncMode()}
+
+/* ---------- overlays ---------- */
+function openSidebar(){if(sidebarOpen)return;closeSheet(true);sidebarOpen=true;renderSidebar();syncMode();later(()=>{$('#sidebar').classList.add('open');$('#scrim').classList.add('on')})}
+function closeSidebar(){if(!sidebarOpen)return;sidebarOpen=false;$('#sidebar').classList.remove('open');scrimSync();syncMode()}
+function scrimSync(){$('#scrim').classList.toggle('on',sidebarOpen||!!sheetKind||glanceOpen)}
+const SHEETS={shield:shieldHTML,menu:menuHTML,focus:focusHTML,settings:settingsHTML,fav:favEditHTML};
+let favEdit=-1;
+function openSheet(k){closeSidebar();const wasOpen=!!sheetKind;sheetKind=k;const sh=$('#sheet');sh.innerHTML='<div class="grab"></div>'+SHEETS[k]();sh.scrollTop=0;syncMode();clearTimeout(hideT);
+ if(wasOpen){sh.classList.add('open');scrimSync()}else later(()=>{sh.classList.add('open');scrimSync()})}
+function refreshSheet(){if(!sheetKind)return;const sh=$('#sheet');const st=sh.scrollTop;sh.innerHTML='<div class="grab"></div>'+SHEETS[sheetKind]();sh.scrollTop=st}
+function closeSheet(quiet){if(!sheetKind)return;sheetKind=null;$('#sheet').classList.remove('open');scrimSync();if(!quiet)syncMode();if(S.compact&&!quiet)setBarShown(false)}
+function openUE(pre){closeSheet(true);closeSidebar();ueOpen=true;$('#ue').classList.add('on');const i=$('#ueIn');i.value=pre||'';renderSugg();syncMode();setTimeout(()=>{i.focus();i.select();try{N.keyboard()}catch(_){}},120)}
+function closeUE(){if(!ueOpen)return;ueOpen=false;$('#ue').classList.remove('on');$('#ueIn').blur();syncMode();if(S.compact)setBarShown(false)}
+function openHelp(){closeSheet(true);closeSidebar();helpOpen=true;$('#help').innerHTML=helpHTML();$('#help').classList.add('on');$('.hp-body').scrollTop=0;syncMode()}
+function closeHelp(){if(!helpOpen)return;helpOpen=false;S.seenHelp=true;save();$('#help').classList.remove('on');syncMode()}
+
+/* glance */
+let glanceUrl='',glanceT=null;
+function openGlance(url){if(!/^https?:/i.test(url)){navigate(url);return}closeSheet(true);closeSidebar();glanceUrl=url;glanceOpen=true;
+ const g=$('#glance');g.innerHTML=`<div class="gl-card"><div class="gl-head">${fav(url,24)}<span class="gl-t"><b id="glTitle">${esc(bare(hostOf(url)))}</b><small id="glUrl">${esc(url)}</small></span><button class="ib sm" data-act="gl-copy" aria-label="Copy link">${ic('copy',18)}</button><button class="btn sm pri" data-act="gl-open">Open as tab</button><button class="ib sm" data-act="gl-close" aria-label="Close preview">${ic('x',18)}</button></div><div class="gl-body">Loading preview…</div></div>`;
+ syncMode();later(()=>{g.classList.add('on');scrimSync();clearTimeout(glanceT);glanceT=setTimeout(placeGlance,240)})}
+function placeGlance(){if(!glanceOpen)return;const r=$('.gl-body').getBoundingClientRect();N.glance(glanceUrl,r.left,r.top,r.width,r.height)}
+function closeGlance(){if(!glanceOpen)return;glanceOpen=false;clearTimeout(glanceT);N.glanceClose();$('#glance').classList.remove('on');$('#glance').innerHTML='';scrimSync();syncMode()}
+window.addEventListener('resize',()=>{if(glanceOpen){clearTimeout(glanceT);glanceT=setTimeout(placeGlance,120)}});
+
+/* ---------- sheets ---------- */
+const sw=(act,on,label)=>`<button class="sw ${on?'on':''}" role="switch" aria-checked="${on}" aria-label="${esc(label)}" data-act="${act}"><i></i></button>`;
+function shieldHTML(){const t=cur(),e=E(t.id);const web=t.url!==START&&!e.paused;const h=bare(hostOf(t.url));const allowed=web&&isAllowedHost(h);
+ let x=`<h3 class="sh-t">${web?fav(t.url,26):ic('shield',22)}<span>${web?esc(h):'Blocking'}</span></h3>`;
+ if(web){x+=`<p class="sh-big">${allowed?0:e.blocked}<small>${allowed?'blocked: protection is off here':'ads and trackers blocked on this page'}</small></p>
+  ${stopsHTML(e)}
+  <div class="row"><div><b>Protection on ${esc(h)}</b><small>${allowed?'Off. Ads, trackers and cookie banners show on this site.':'If this site looks broken, turn this off and the page reloads.'}</small></div>${sw('tog-site',!allowed,'Protection on this site')}</div>`}
+ else x+=`<p class="muted" style="margin:0">Open a website to see what Lull blocks on it.</p>`;
+ x+=`<p class="sh-sec">Everywhere</p>`+[['youtube','YouTube ads','Removes video ads before, during and after videos, plus ads in the feed, search and Shorts.'],['ads','Ads and trackers','Requests to ${n} known ad and tracking servers'],['cookies','Cookie banners','Hides consent pop-ups on most sites'],['autoplay','Autoplay video','Videos wait until you tap play'],['popups','Pop-ups','Blocks pop-ups and pop-unders, and pages that open windows or dialogs you didn’t ask for. Links you tap still open.'],['redirects','Redirects','Stops pages sending you to another site without you tapping a link, and stops apps opening on their own.']].map(r=>`<div class="row"><div><b>${r[1]}</b><small>${r[2].replace('${n}','78,000')}</small></div>${sw('tog:'+r[0],S.block[r[0]],r[1])}</div>`).join('');
+ return x}
+function stopsHTML(e){if(!e.stops.length)return'';const pops=e.stops.filter(x=>x.kind==='popup').length,reds=e.stops.length-pops;
+ const list=e.stops.filter(x=>x.url&&/^https?:/.test(x.url)).slice(-5).reverse();
+ return`<div class="chips" style="display:flex;gap:6px;flex-wrap:wrap;margin:8px 0 0">${pops?`<span class="key">${ic('popup',14)}${pops} pop-up${pops>1?'s':''} blocked</span>`:''}${reds?`<span class="key">${ic('redirect',14)}${reds} redirect${reds>1?'s':''} stopped</span>`:''}</div>
+ ${list.length?`<div class="stop-list">${list.map((x,i)=>`<div class="stop">${ic(x.kind==='popup'?'popup':'redirect',16)}<span>${esc(x.url)}</span><button class="btn sm" data-act="stop-open:${e.stops.indexOf(x)}">Open</button></div>`).join('')}</div>`:''}`}
+function pathOf(u){try{return new URL(u).pathname.replace(/\/$/,'')}catch(e){return u}}
+function isFav(url){const h=bare(hostOf(url));return S.favs.findIndex(f=>f.url===url||(h&&bare(hostOf(f.url))===h&&pathOf(f.url)===pathOf(url)))}
+function menuHTML(){const t=cur(),e=E(t.id);const web=t.url!==START&&!e.paused;const fi=web?isFav(t.url):-1;const left=sessionLeft();
+ const tile=(a,i,l,sub,on,dis)=>`<button class="tile ${on?'on':''}" data-act="${a}" ${dis?'disabled':''}>${ic(i,22)}<span>${l}</span>${sub!=null?`<small>${sub}</small>`:''}</button>`;
+ return`<div class="mn-nav"><button class="ib" data-act="back" ${web&&e.canBack?'':'disabled'} aria-label="Back">${ic('back',22)}</button><button class="ib" data-act="fwd" ${web&&e.canFwd?'':'disabled'} aria-label="Forward">${ic('fwd',22)}</button><button class="ib" data-act="reload" ${web?'':'disabled'} aria-label="${e.loading?'Stop':'Reload'}">${ic(e.loading?'stop':'reload',22)}</button><button class="ib" data-act="copylink" ${web?'':'disabled'} aria-label="Copy link">${ic('copy',22)}</button></div>
+ <div class="mn-grid">${PRIV?`${tile('newtab','plus','New private tab')}${tile('reader','reader','Reader view',web?(e.reader?'On':'Off'):null,e.reader,!web)}${tile('share','share','Share',null,false,!web)}${tile('compact','compact','Compact mode',S.compact?'On':'Off',S.compact)}${tile('focus','focus','Focus',left?fmt(left)+' left':S.limits.length+(S.limits.length===1?' limit':' limits'),left>0)}${tile('help','help','How to use')}</div><div class="btnrow"><button class="btn danger" data-act="close-private">Close private tabs</button></div>`:`${tile('newtab','plus','New tab')}${tile('private','mask','Private tab')}${tile('favtoggle',fi>=0?'starOn':'star',fi>=0?'In favourites':'Add to favourites',null,fi>=0,!web)}${tile('reader','reader','Reader view',web?(e.reader?'On':'Off'):null,e.reader,!web)}
+ ${tile('compact','compact','Compact mode',S.compact?'On':'Off',S.compact)}${tile('focus','focus','Focus',left?fmt(left)+' left':S.limits.length+(S.limits.length===1?' limit':' limits'),left>0)}${tile('settings','gear','Settings')}${tile('share','share','Share',null,false,!web)}${tile('help','help','How to use')}</div>`}
+ ${e.reader?`<div class="rd-row"><span>Reader text size</span><button class="btn sm" data-act="rd-" aria-label="Smaller text">A−</button><button class="btn sm" data-act="rd+" aria-label="Larger text">A+</button></div>`:''}`}
+function focusHTML(){const left=sessionLeft();const u=usage();
+ return`<h3 class="sh-t">${ic('focus',22)}<span>Focus</span></h3><div class="fc-card">${left?`<p class="sh-big" data-left>${fmt(left)}</p><p class="muted">left in this focus session. The sites below stay paused until it ends.</p><button class="btn" data-act="session-end">End session</button>`
+ :`<p>A focus session pauses every site below, whatever time it has left today.</p><div class="fc-btns">${[15,25,50].map(m=>`<button class="btn" data-act="session:${m}" ${S.limits.length?'':'disabled'}>${m} min</button>`).join('')}</div>`}</div>
+ <p class="sh-sec">Daily limits</p>
+ ${S.limits.map(l=>{const used=Math.floor((u[l.host]||0)/60);return`<div class="lim"><div class="lim-top">${fav('https://'+l.host,22)}<b>${esc(l.host)}</b><span class="muted">${Math.min(used,l.min)} of ${l.min} min today</span></div><div class="lim-bar"><i style="width:${Math.min(100,(u[l.host]||0)/(l.min*60)*100)}%"></i></div><div class="lim-ctl"><button class="btn sm" data-act="lim-:${esc(l.host)}" aria-label="5 minutes less">−5 min</button><button class="btn sm" data-act="lim+:${esc(l.host)}" aria-label="5 minutes more">+5 min</button><button class="btn sm ghost" data-act="lim-del:${esc(l.host)}">Remove</button></div></div>`}).join('')||'<p class="muted small" style="margin:6px 0">No limits yet. Add a site that eats your time, like a video or social site.</p>'}
+ <form class="lim-add" data-form="lim"><input class="field" id="limHost" placeholder="e.g. youtube.com" autocomplete="off" autocapitalize="off" inputmode="url" aria-label="Site"><input class="field num" id="limMin" type="number" min="1" max="600" value="20" aria-label="Minutes a day"><button class="btn" type="submit">Add</button></form>
+ <p class="muted small">Minutes a day. Time counts while the site is on screen. When it runs out, the site is paused until tomorrow.</p>`}
+function settingsHTML(){return`<h3 class="sh-t">${ic('gear',22)}<span>Settings</span></h3>
+ <p class="sh-sec">Search engine</p>${Object.keys(ENGINES).map(k=>`<button class="opt ${S.engine===k?'on':''}" data-act="engine:${k}"><i></i>${ENGINES[k][0]}</button>`).join('')}
+ <p class="sh-sec">Theme</p><div class="seg">${['system','light','dark'].map(k=>`<button class="${S.theme===k?'on':''}" data-act="theme:${k}">${k[0].toUpperCase()+k.slice(1)}</button>`).join('')}</div>
+ <p class="sh-sec">Playback</p><div class="row"><div><b>Keep playing in the background</b><small>Music and videos keep playing when you leave Lull or turn the screen off. Controls appear in your notifications and on the lock screen.</small></div>${sw('bgaudio',S.bgAudio!==false,'Keep playing in the background')}</div>
+ <p class="sh-sec">Privacy</p><div class="row"><div><b>Clear browsing data</b><small>Cookies, site storage, cache and history. You'll be signed out of sites.</small></div><button class="btn sm danger" data-act="clear">Clear</button></div>
+ <p class="sh-sec">About</p><p class="muted small" style="margin:0">Lull ${esc(N.version())} by Caffeine Not Included. Uses Android System WebView. Blocklist: StevenBlack/hosts (MIT). Reader view: Mozilla Readability (Apache 2.0).</p>`}
+function favEditHTML(){const f=favEdit>=0?S.favs[favEdit]:{name:'',url:''};
+ return`<h3 class="sh-t">${favEdit>=0?fav(f.url,26,f.name):ic('star',22)}<span>${favEdit>=0?'Edit favourite':'Add a favourite'}</span></h3>
+ <form data-form="fav"><label class="flabel" for="favName">Name</label><input class="field" id="favName" value="${esc(f.name)}" placeholder="e.g. Wikipedia" autocomplete="off">
+ <label class="flabel" for="favUrl">Address</label><input class="field" id="favUrl" value="${esc(f.url)}" placeholder="e.g. wikipedia.org" autocomplete="off" autocapitalize="off" inputmode="url">
+ <div class="btnrow"><button class="btn pri" type="submit">Save</button></div></form>
+ ${favEdit>=0?`<div class="btnrow"><button class="btn sm" data-act="fav-move:-1" ${favEdit===0?'disabled':''}>Move earlier</button><button class="btn sm" data-act="fav-move:1" ${favEdit===S.favs.length-1?'disabled':''}>Move later</button><button class="btn sm danger" data-act="fav-del">${'Remove'}</button></div>`:''}`}
+
+/* ---------- how to use ---------- */
+function barDiagram(){const a='var(--accent)';
+ return`<svg viewBox="0 0 340 118" role="img" aria-label="The bar: tabs button, shield, address, reader button, menu button">
+ <rect x="8" y="40" width="44" height="44" rx="15" fill="var(--surface)" stroke="var(--line)"/><rect x="20" y="52" width="20" height="20" rx="6" fill="none" stroke="${a}" stroke-width="1.8"/><text x="30" y="66" font-size="10" text-anchor="middle" fill="${a}" font-family="Onest" font-weight="600">3</text>
+ <rect x="60" y="40" width="220" height="44" rx="15" fill="var(--surface)" stroke="var(--line)"/>
+ <g transform="translate(70,50)" fill="none" stroke="${a}" stroke-width="1.7"><path d="M12 3.5l7 2.8v4.9c0 4.3-2.9 7.9-7 9.6-4.1-1.7-7-5.3-7-9.6V6.3z"/></g>
+ <circle cx="132" cy="62" r="3.5" fill="${a}"/><text x="140" y="67" font-size="14" fill="var(--ink)" font-family="Onest" font-weight="500">wikipedia.org</text>
+ <g transform="translate(246,50)" fill="none" stroke="var(--ink)" stroke-width="1.7" stroke-linecap="round"><path d="M6 6.5h12M6 10.5h12M6 14.5h8M6 18.5h10"/></g>
+ <rect x="288" y="40" width="44" height="44" rx="15" fill="var(--surface)" stroke="var(--line)"/><g fill="var(--ink)"><circle cx="300" cy="62" r="1.8"/><circle cx="310" cy="62" r="1.8"/><circle cx="320" cy="62" r="1.8"/></g>
+ ${[[30,1],[82,2],[170,3],[258,4],[310,5]].map(([x,n])=>`<line x1="${x}" y1="${n%2?30:96}" x2="${x}" y2="${n%2?38:86}" stroke="${a}" stroke-width="1.5"/><circle cx="${x}" cy="${n%2?18:108}" r="10" fill="${a}"/><text x="${x}" y="${n%2?22:112}" font-size="11.5" text-anchor="middle" fill="#fff" font-family="Onest" font-weight="600">${n}</text>`).join('')}
+ </svg>`}
+function helpHTML(){const k=(i,t)=>`<span class="key">${ic(i,14)}${t}</span>`;
+ const sec=(n,title,body)=>`<section class="hp-sec"><h3><span class="n">${n}</span>${title}</h3>${body}</section>`;
+ return`<div class="hp-top">${S.seenHelp?`<button class="ib" data-act="help-close" aria-label="Back">${ic('back',22)}</button>`:''}<h2>How to use Lull</h2></div>
+ <div class="hp-body">
+ <div class="hp-hero">${'<span class="fav fav-lull" style="width:52px;height:52px">'+logo(36)+'</span>'}<div><h1>A quiet browser</h1><p>Everything you need is in the bar at the bottom. Here's what each part does.</p></div></div>
+ ${sec(1,'The bar',`<div class="hp-dia">${barDiagram()}</div><ul class="hp-legend">
+  <li><span class="n">1</span><span><b>Tabs.</b> The number is how many tabs are open. Tap it to see them all.</span></li>
+  <li><span class="n">2</span><span><b>Shield.</b> How many ads and trackers Lull blocked on this page.</span></li>
+  <li><span class="n">3</span><span><b>Address.</b> Tap it to search or type a website.</span></li>
+  <li><span class="n">4</span><span><b>Reader view.</b> Turns an article into clean, easy text.</span></li>
+  <li><span class="n">5</span><span><b>Menu.</b> Back, forward, favourites, focus and settings.</span></li></ul>`)}
+ ${sec(2,'Move between tabs',`<p><b>Swipe left or right on the address</b> to jump to the next or previous tab.</p><p><b>Swipe up on the address</b>, or tap the tabs button, to see all your tabs. Tap a tab to open it, or ${k('x','')} to close it.</p>`)}
+ ${sec(3,'Spaces',`<p>Tabs live in three spaces: <b>Personal</b>, <b>Dev</b> and <b>Reading</b>. Each space keeps its own tabs and has its own colour, so work and fun stay apart.</p><p>In the tab list, tap a space at the top, or swipe sideways across the list, to change space.</p>`)}
+ ${sec(4,'Glance: preview a link',`<ol><li><b>Press and hold any link</b> on a page.</li><li>The link opens in a preview card on top of the page you're reading.</li><li>Tap <b>Open as tab</b> to keep it, or tap outside the card (or press Back) to close it.</li></ol>`)}
+ ${sec(5,'Favourites on the New Tab page',`<p>Your favourites are the round icons on the New Tab page and at the top of the tab list.</p><ol><li><b>Add one:</b> open the site, then ${k('dots','Menu')} › <b>Add to favourites</b>. Or tap ${k('plus','Add')} on the New Tab page and type the address.</li><li><b>Change one:</b> press and hold it on the New Tab page to rename it, move it or remove it.</li></ol>`)}
+ ${sec(6,'Blocking',`<p>Lull blocks ads, trackers, cookie banners and autoplaying video on every site.</p><p><b>YouTube:</b> video ads are removed before they load, and ads in the home feed, search and Shorts are hidden. If an ad still slips through, Lull mutes it and skips straight past it. YouTube changes often, so now and then one may get through.</p><p><b>Pop-ups and redirects:</b> pages can't open new windows, pop-unders or a stream of alert boxes, and can't send you to another site unless you tapped a link. When Lull stops one, a note appears just above the bar. Tap <b>Go there</b> (or <b>Open</b>) if you did want it. Links you tap that open in a new window become a new tab.</p><p>If a site looks broken, tap the ${k('shield','shield')} and switch off <b>Protection</b> for that site only.</p>`)}
+ ${sec(7,'Compact mode',`<p>${k('dots','Menu')} › <b>Compact mode</b> hides the bar so pages fill the screen.</p><p>To bring the bar back, <b>tap or swipe up on the thin line</b> at the bottom of the screen. It hides again when you scroll.</p>`)}
+ ${sec(8,'Stay focused',`<p><b>Reader view:</b> on an article, tap ${k('reader','')} in the bar. Change the text size from the menu while reading. Tap ${k('reader','')} again to leave.</p><p><b>Daily limits:</b> ${k('dots','Menu')} › <b>Focus</b>, add a site and how many minutes a day you want on it. When the time is used up, the site is paused until tomorrow.</p><p><b>Focus sessions:</b> in the same place, start a 15, 25 or 50 minute session to pause all those sites at once.</p>`)}
+ ${sec(9,'Private tabs',`<p>${k('dots','Menu')} › <b>Private tab</b> opens a separate private window (it shows as “Lull Private” in your recent apps).</p><ol><li>Pages you visit there aren't added to history, and nothing you open is saved in Lull.</li><li>Cookies, logins and site data stay apart from your normal tabs.</li><li>When you tap <b>Close private tabs</b>, all of it is deleted.</li></ol><p>Downloads still go to your phone's Downloads folder. Websites and your network can still see what you do.</p>`)}
+ ${sec(10,'Listen in the background',`<p>Start a song, podcast or video in Lull, then leave the app or turn the screen off: it keeps playing.</p><p>Play, pause and stop are in your notifications and on the lock screen. Headphone buttons work too.</p><p>This works on YouTube as well. To turn it off, open ${k('dots','Menu')} \u203a <b>Settings</b> \u203a <b>Keep playing in the background</b>.</p>`)}
+ ${sec(11,'Going back',`<p>Android's Back gesture closes whatever is open first (a preview, the menu, the tab list), then goes back a page.</p>`)}
+ ${sec(12,'Make Lull your default browser',`<p>So links from other apps open here: open Android <b>Settings › Apps › Default apps › Browser app</b> and choose <b>Lull</b>. The exact names can differ a little between phones.</p>`)}
+ <p class="muted small">You can open this page any time from ${k('dots','Menu')} or from the bottom of the New Tab page.</p>
+ </div><div class="hp-foot"><button class="btn pri" data-act="help-close">${S.seenHelp?'Done':'Start browsing'}</button></div>`}
+
+/* ---------- address editing ---------- */
+const sgRow=(act,url,title,sub)=>`<button class="sg" data-act="${esc(act)}">${fav(url,22,title)}<span><b>${esc(title)}</b><small>${esc(sub)}</small></span></button>`;
+function renderSugg(){const raw=$('#ueIn').value.trim(),q=raw.toLowerCase();let h='';$('#ueClear').style.visibility=raw?'visible':'hidden';
+ if(q){const u=toUrl(raw);const isSearch=searchQuery(u)!=null;
+  h+=isSearch?`<button class="sg" data-act="ue-go">${ic('search',20)}<span><b>${esc(raw)}</b><small>Search ${ENGINES[S.engine][0]}</small></span></button>`:`<button class="sg" data-act="ue-go">${ic('globe',20)}<span><b>${esc(raw)}</b><small>Go to site</small></span></button>`;
+  if(!isSearch)h+=`<button class="sg" data-act="ue-search">${ic('search',20)}<span><b>${esc(raw)}</b><small>Search ${ENGINES[S.engine][0]}</small></span></button>`}
+ const match=(t,u)=>!q||(t+' '+u).toLowerCase().includes(q);
+ const tabs=S.tabs.filter(t=>t.id!==cur().id&&t.url!==START&&match(niceTitle(t),t.url));
+ if(tabs.length)h+='<p class="sg-h">Switch to tab</p>'+tabs.slice(0,5).map(t=>sgRow('ue-tab:'+t.id,t.url,niceTitle(t),WS.find(w=>w.id===t.ws).name+' · '+bare(hostOf(t.url)))).join('');
+ const favs=S.favs.filter(f=>match(f.name,f.url));
+ if(favs.length)h+='<p class="sg-h">Favourites</p>'+favs.slice(0,6).map(f=>sgRow('ue-url:'+f.url,f.url,f.name,bare(hostOf(f.url)))).join('');
+ const hs=S.hist.filter(x=>match(x.t||'',x.u)).slice(0,q?8:6);
+ if(hs.length)h+=`<p class="sg-h">${q?'History':'Recent'}</p>`+hs.map(x=>sgRow('ue-url:'+x.u,x.u,x.t||bare(hostOf(x.u)),bare(hostOf(x.u)))).join('');
+ $('#ueList').innerHTML=h}
+$('#ueIn').addEventListener('input',renderSugg);
+function goTyped(){const v=$('#ueIn').value.trim();if(!v)return;closeUE();navigate(v)}
+
+/* ---------- native events ---------- */
+let visible=true,sbT=null;
+window.lullOn=function(type,d){try{switch(type){
+ case'page':{if(d.tab==='glance'){const t=$('#glTitle'),u=$('#glUrl');if(t&&d.title)t.textContent=d.title;if(u&&d.url)u.textContent=d.url;return}
+  const t=S.tabs.find(x=>x.id===d.tab);if(!t)return;const e=E(t.id);
+  if(d.url&&!/^about:blank/.test(d.url)&&!/^data:/.test(d.url))t.url=d.url;
+  if(d.title&&!/^https?:\/\//.test(d.title)&&d.title!=='about:blank')t.title=d.title;
+  e.canBack=!!d.canBack;e.canFwd=!!d.canFwd;
+  if(d.loading===true){e.loading=true;e.reader=false;e.stops=[];if(t.id===cur().id&&notice&&notice.tab===t.id)hideNotice();
+   if(d.url&&focusBlocked(d.url)&&!e.paused){e.paused=d.url;N.nav(t.id,'stop');if(t.id===cur().id)showCurrent()}}
+  if(d.loading===false){e.loading=false;if(/^https?:/.test(t.url))addHist(t.url,t.title)}
+  save();if(t.id===cur().id){renderBar();if(sheetKind==='menu')refreshSheet()}
+  if(sidebarOpen){clearTimeout(sbT);sbT=setTimeout(()=>renderSidebar(),200)}break}
+ case'progress':{const e=E(d.tab);e.progress=d.p;if(d.p>=100)e.loading=false;if(d.tab===cur().id)renderBar();break}
+ case'icon':{const h=bare(d.host);if(!h)return;S.icons[h]=d.data;const ks=Object.keys(S.icons);if(ks.length>80)delete S.icons[ks[0]];save();if(screenShown())renderScreen();break}
+ case'blocked':{const e=E(d.tab);const delta=d.n-(e.blocked||0);if(delta>0){if(S.week.k!==weekKey())S.week={k:weekKey(),n:0};S.week.n+=delta;save()}e.blocked=d.n;if(d.tab===cur().id){renderBar();if(sheetKind==='shield')refreshSheet()}break}
+ case'glance':openGlance(d.url);break;
+ case'newtab':{const src=S.tabs.find(x=>x.id===d.tab);if(src&&src.ws!==S.activeWs){S.activeWs=src.ws}closeGlance();newTab(d.url);break}
+ case'popup':case'redirect':{const e=E(d.tab);e.stops.push({kind:type,url:d.url||''});if(e.stops.length>30)e.stops.shift();
+  if(d.tab===cur().id||d.tab==='glance'){renderBar();if(sheetKind==='shield')refreshSheet();
+   if(type==='redirect'&&d.url)showNotice({tab:d.tab,kind:'redirect',url:d.url});
+   else if(type==='popup'&&e.stops.filter(x=>x.kind==='popup').length===1)showNotice({tab:d.tab,kind:'popup',url:d.url})}
+  break}
+ case'scroll':if(S.compact&&barShown&&!needFull())setBarShown(false);break;
+ case'openurl':closeAllOverlays();newTab(d.url);break;
+ case'reader':{const e=E(d.tab);if(d.result==='ok'){e.reader=true;N.readerSize(d.tab,S.readerSize)}else if(d.result==='exit'){e.reader=false}else{e.reader=false;N.toast("Reader view isn't available on this page")}if(d.tab===cur().id)renderBar();refreshSheet();break}
+ case'visible':visible=!!d.v;if(visible)tick();break;
+ case'night':night=!!d.v;applyTheme();break;
+ }}catch(err){console.error(err)}};
+function addHist(u,t){S.hist=S.hist.filter(x=>x.u!==u);S.hist.unshift({u,t:t||'',ts:Date.now()});if(S.hist.length>400)S.hist.length=400;save()}
+function closeAllOverlays(){closeUE();closeGlance();closeSheet(true);closeSidebar();if(helpOpen)closeHelp();syncMode()}
+window.lullBack=function(){
+ if(ueOpen){closeUE();return true}
+ if(glanceOpen){closeGlance();return true}
+ if(sheetKind){closeSheet();return true}
+ if(sidebarOpen){closeSidebar();return true}
+ if(helpOpen){closeHelp();return true}
+ const t=cur(),e=E(t.id);
+ if(e.paused){act('pz-back');return true}
+ if(e.reader){e.reader=false;N.nav(t.id,'reload');renderBar();return true}
+ return false};
+
+/* ---------- notice above the bar: stopped redirects and pop-ups ---------- */
+let notice=null,noticeT=null;
+function showNotice(n){notice=n;const h=bare(hostOf(n.url||''));const el=$('#notice');
+ el.innerHTML=`${ic(n.kind==='popup'?'popup':'redirect',20)}<span class="nt"><b>${n.kind==='popup'?'Pop-up blocked':'Redirect stopped'}</b><small>${n.kind==='popup'?(h?esc(h)+' tried to open':'This page tried to open a window'):'This page tried to send you to '+esc(h||n.url)}</small></span>${n.url&&/^https?:/.test(n.url)?`<button class="btn sm" data-act="notice-go">${n.kind==='popup'?'Open':'Go there'}</button>`:''}<button class="ib sm" data-act="notice-x" aria-label="Dismiss">${ic('x',16)}</button>`;
+ noticeOn=true;if(S.compact&&!barShown){barShown=true;document.body.classList.remove('bar-hidden')}syncMode();
+ later(()=>el.classList.add('on'));clearTimeout(noticeT);noticeT=setTimeout(hideNotice,8000)}
+function hideNotice(){if(!noticeOn)return;notice=null;$('#notice').classList.remove('on');clearTimeout(noticeT);noticeOn=false;syncMode();if(S.compact)setBarShown(false)}
+
+/* ---------- actions ---------- */
+function act(a,b){const ix=a.indexOf(':');const k=ix<0?a:a.slice(0,ix),v=ix<0?'':a.slice(ix+1);const t=cur(),e=E(t.id);
+ switch(k){
+ case'tabs':openSidebar();break;
+ case'sb-close':closeSidebar();break;
+ case'url':{const web=t.url!==START&&!e.paused;const q=web?searchQuery(t.url):null;openUE(web?(q!=null?q:t.url):'');break}
+ case'shield':openSheet('shield');break;
+ case'menu':openSheet('menu');break;
+ case'reader':if(t.url===START||e.paused)break;closeSheet();if(e.reader){e.reader=false;N.nav(t.id,'reload');renderBar()}else N.reader(t.id);break;
+ case'ws':switchWs(v,WS.findIndex(w=>w.id===v)>WS.findIndex(w=>w.id===S.activeWs)?'sw-l':'sw-r');break;
+ case'tab':closeSidebar();if(v!==t.id)selectTab(v);break;
+ case'close':closeTab(v);break;
+ case'newtab':closeSheet(true);closeSidebar();newTab();break;
+ case'private':closeSheet();N.openPrivate();break;
+ case'close-private':closeSheet(true);N.closePrivate();break;
+ case'notice-go':{const n=notice;hideNotice();if(n&&n.url){if(n.kind==='popup'||n.tab==='glance')newTab(n.url);else{const tt=S.tabs.find(x=>x.id===n.tab);if(tt)navigate(n.url,tt)}}break}
+ case'notice-x':hideNotice();break;
+ case'stop-open':{const x=e.stops[+v];closeSheet();if(x&&x.url){if(x.kind==='popup')newTab(x.url);else navigate(x.url,t)}break}
+ case'sbfav':openFavInSpace(+v);break;
+ case'closeall':if(PRIV){N.closePrivate();break}closeAll();break;
+ case'back':closeSheet();N.nav(t.id,'back');break;
+ case'fwd':closeSheet();N.nav(t.id,'forward');break;
+ case'reload':closeSheet();N.nav(t.id,e.loading?'stop':'reload');break;
+ case'copylink':N.copy(t.url);N.toast('Link copied');closeSheet();break;
+ case'share':N.share(t.url,niceTitle(t));closeSheet();break;
+ case'favtoggle':{const i=isFav(t.url);if(i>=0){S.favs.splice(i,1);N.toast('Removed from favourites')}else{S.favs.push({url:t.url,name:shortName(t)});N.toast('Added to favourites on the New Tab page')}save();refreshSheet();break}
+ case'fav-new':favEdit=-1;openSheet('fav');setTimeout(()=>{const n=$('#favUrl');if(n){n.focus();try{N.keyboard()}catch(_){}}},380);break;
+ case'fav-move':{const j=favEdit+(+v);if(j<0||j>=S.favs.length)break;const f=S.favs.splice(favEdit,1)[0];S.favs.splice(j,0,f);favEdit=j;save();refreshSheet();renderScreen();break}
+ case'fav-del':if(favEdit>=0){const f=S.favs.splice(favEdit,1)[0];save();closeSheet();renderScreen();N.toast('Removed '+f.name)}break;
+ case'compact':S.compact=!S.compact;save();closeSheet(true);applyCompact();N.toast(S.compact?'Compact mode on. Tap the line at the bottom to show the bar.':'Compact mode off');break;
+ case'focus':openSheet('focus');break;
+ case'settings':openSheet('settings');break;
+ case'help':openHelp();break;
+ case'help-close':closeHelp();break;
+ case'engine':S.engine=v;save();refreshSheet();break;
+ case'bgaudio':S.bgAudio=S.bgAudio===false;save();pushBlocking();refreshSheet();N.toast(S.bgAudio?'Audio keeps playing in the background':'Audio stops when you leave Lull');break;
+ case'theme':S.theme=v;save();applyTheme();refreshSheet();renderScreen();break;
+ case'clear':if(b.dataset.sure){N.clearData();S.hist=[];S.icons={};save();N.toast('Browsing data cleared');closeSheet()}else{b.dataset.sure='1';b.textContent='Tap again to clear'}break;
+ case'session':S.session=Date.now()+(+v)*60000;save();refreshSheet();N.toast('Focus session started');checkFocusNow();break;
+ case'session-end':S.session=0;save();refreshSheet();unpause(t);N.toast('Focus session ended');break;
+ case'lim+':case'lim-':{const l=S.limits.find(x=>x.host===v);if(l){l.min=Math.max(5,l.min+(k==='lim+'?5:-5));save();refreshSheet();checkFocusNow()}break}
+ case'lim-del':S.limits=S.limits.filter(x=>x.host!==v);save();refreshSheet();unpause(t);break;
+ case'pz-back':{const u=e.paused;e.paused=null;if(e.canBack){N.show(t.id,'');N.nav(t.id,'back')}else{t.url=START;t.title='New tab';N.close(t.id)}save();showCurrent();break}
+ case'pz-more':{const l=limitFor(hostOf(e.paused||''));if(l){usage()[l.host]=Math.max(0,l.min*60-300);save()}unpause(t);N.toast('5 more minutes');break}
+ case'rd-':case'rd+':S.readerSize=Math.max(14,Math.min(28,S.readerSize+(k==='rd+'?1:-1)));save();N.readerSize(t.id,S.readerSize);break;
+ case'ue-cancel':closeUE();break;
+ case'ue-go':goTyped();break;
+ case'ue-search':{const q=$('#ueIn').value.trim();closeUE();navigate(ENGINES[S.engine][1]+encodeURIComponent(q));break}
+ case'ue-url':closeUE();navigate(v);break;
+ case'ue-tab':closeUE();selectTab(v);break;
+ case'gl-open':{let u='';try{u=N.glanceUrl()}catch(_){}u=u&&/^https?:/.test(u)?u:glanceUrl;closeGlance();newTab(u);N.toast('Opened as a new tab');break}
+ case'gl-copy':N.copy(glanceUrl);N.toast('Link copied');break;
+ case'gl-close':closeGlance();break;
+ case'tog-site':{const h=bare(hostOf(t.url));if(!h)break;if(isAllowedHost(h))S.allow=S.allow.filter(x=>!(h===x||h.endsWith('.'+x)));else S.allow.push(h);save();pushBlocking();N.nav(t.id,'reload');refreshSheet();renderBar();break}
+ case'tog':S.block[v]=!S.block[v];save();pushBlocking();refreshSheet();renderBar();if(t.url!==START&&!e.paused)N.nav(t.id,'reload');break;
+ }}
+function shortName(t){const h=bare(hostOf(t.url));const parts=(t.title||'').split(/\s[–—|\-·:]\s/).map(x=>x.trim()).filter(Boolean);let n=parts.length>1&&parts[parts.length-1].length<=18?parts[parts.length-1]:parts[0];if(!n||n.length>18)n=h.split('.').slice(-2)[0]||h;return n.charAt(0).toUpperCase()+n.slice(1)}
+function unpause(t){const e=E(t.id);if(!e.paused)return;const u=e.paused;e.paused=null;t.url=u;e.loading=true;N.open(t.id,u);save();showCurrent()}
+function checkFocusNow(){const t=cur(),e=E(t.id);if(t.url!==START&&!e.paused&&focusBlocked(t.url)){e.paused=t.url;N.nav(t.id,'stop');showCurrent()}else if(screenShown())renderScreen()}
+function pushBlocking(){N.blocking(JSON.stringify({ads:S.block.ads,cookies:S.block.cookies,autoplay:S.block.autoplay,popups:S.block.popups,redirects:S.block.redirects,youtube:S.block.youtube,bgaudio:S.bgAudio!==false,allow:S.allow}))}
+
+/* ---------- input ---------- */
+let swallow=false;
+document.addEventListener('pointerdown',()=>{swallow=false},true);
+document.addEventListener('click',e=>{if(swallow){swallow=false;e.preventDefault();e.stopPropagation();return}
+ const f=e.target.closest('[data-fav]');if(f){if(favLong){favLong=false;return}const fv=S.favs[+f.dataset.fav];if(fv)navigate(fv.url);return}
+ const b=e.target.closest('[data-act]');if(b&&!b.disabled)act(b.dataset.act,b)});
+document.addEventListener('submit',e=>{e.preventDefault();const f=e.target.dataset.form;
+ if(f==='ue')goTyped();
+ if(f==='lim'){let h=bare(hostOf(toUrl($('#limHost').value.trim()))||'');const m=Math.max(1,Math.min(600,parseInt($('#limMin').value,10)||20));
+  if(!h||!h.includes('.')){N.toast('Type a site address, like youtube.com');return}
+  const l=S.limits.find(x=>x.host===h);if(l)l.min=m;else S.limits.push({host:h,min:m});save();refreshSheet();checkFocusNow()}
+ if(f==='fav'){const name=$('#favName').value.trim(),raw=$('#favUrl').value.trim();const url=toUrl(raw);
+  if(!raw||searchQuery(url)!=null&&!/^https?:/i.test(raw)){N.toast('Type an address, like wikipedia.org');return}
+  const nm=name||bare(hostOf(url)).split('.').slice(-2)[0]||raw;const item={url,name:nm.charAt(0).toUpperCase()+nm.slice(1)};
+  if(favEdit>=0)S.favs[favEdit]=item;else S.favs.push(item);save();closeSheet();renderScreen();N.toast(favEdit>=0?'Favourite saved':'Added to favourites')}});
+$('#ueClear').innerHTML=ic('x',16);$('#ueClear').addEventListener('click',()=>{$('#ueIn').value='';renderSugg();$('#ueIn').focus()});
+$('#scrim').addEventListener('click',()=>{if(glanceOpen)closeGlance();else if(sheetKind)closeSheet();else closeSidebar()});
+
+/* favourites: press and hold to edit */
+let favTimer=null,favLong=false,favStart=null;
+document.addEventListener('pointerdown',e=>{const f=e.target.closest('[data-fav]');if(!f)return;favLong=false;favStart={x:e.clientX,y:e.clientY};clearTimeout(favTimer);
+ if(PRIV)return;favTimer=setTimeout(()=>{favLong=true;favEdit=+f.dataset.fav;openSheet('fav')},480)});
+document.addEventListener('pointermove',e=>{if(favStart&&Math.hypot(e.clientX-favStart.x,e.clientY-favStart.y)>10){clearTimeout(favTimer);favStart=null}});
+['pointerup','pointercancel'].forEach(ev=>document.addEventListener(ev,()=>{clearTimeout(favTimer);favStart=null}));
+document.addEventListener('contextmenu',e=>e.preventDefault());
+
+/* address: tap to edit, swipe sideways for tabs, swipe up for the tab list */
+const pillMid=$('#pillMid');let pd=null;
+pillMid.addEventListener('pointerdown',e=>{pd={x:e.clientX,y:e.clientY};try{pillMid.setPointerCapture(e.pointerId)}catch(_){}});
+pillMid.addEventListener('pointerup',e=>{if(!pd)return;const dx=e.clientX-pd.x,dy=e.clientY-pd.y;pd=null;
+ if(Math.abs(dx)>40&&Math.abs(dx)>Math.abs(dy))switchBy(dx<0?1:-1);
+ else if(dy<-24&&Math.abs(dy)>Math.abs(dx))openSidebar();
+ else if(Math.abs(dx)<12&&Math.abs(dy)<12)act('url');
+ if(S.compact)setBarShown(true)});
+pillMid.addEventListener('pointercancel',()=>pd=null);
+pillMid.addEventListener('click',e=>{if(e.detail===0)act('url')});
+
+/* sidebar: swipe sideways to change space */
+let sd=null;const sbEl=$('#sidebar');
+sbEl.addEventListener('pointerdown',e=>{sd={x:e.clientX,y:e.clientY}});
+sbEl.addEventListener('pointerup',e=>{if(!sd)return;const dx=e.clientX-sd.x,dy=e.clientY-sd.y;sd=null;if(Math.abs(dx)>55&&Math.abs(dx)>Math.abs(dy)*1.3){swallow=true;wsBy(dx<0?1:-1)}});
+sbEl.addEventListener('pointercancel',()=>sd=null);
+
+/* compact handle: tap or swipe up */
+let hd=null;const handle=$('#handle');
+handle.addEventListener('pointerdown',e=>{hd=e.clientY;try{handle.setPointerCapture(e.pointerId)}catch(_){}});
+handle.addEventListener('pointermove',e=>{if(hd!==null&&hd-e.clientY>8){hd=null;setBarShown(true)}});
+handle.addEventListener('pointerup',()=>{if(hd!==null)setBarShown(true);hd=null});
+$('#bar').addEventListener('pointerdown',()=>{if(S.compact&&barShown)setBarShown(true)});
+
+/* ---------- ticking: clock, focus sessions, daily limits ---------- */
+let hadSession=sessionLeft()>0;
+function tick(){const now=new Date();document.querySelectorAll('[data-clock]').forEach(el=>el.textContent=clock(now));
+ const left=sessionLeft();document.querySelectorAll('[data-left]').forEach(el=>el.textContent=fmt(left));
+ if(hadSession&&!left){S.session=0;save();N.toast('Focus session finished');const t=cur();if(E(t.id).paused&&!focusBlocked(E(t.id).paused))unpause(t);else if(screenShown())renderScreen();refreshSheet()}
+ hadSession=left>0;
+ const t=cur(),e=E(t.id);
+ if(visible&&t.url!==START&&!e.paused&&!helpOpen){const l=limitFor(hostOf(t.url));if(l){const u=usage();u[l.host]=(u[l.host]||0)+1;
+  const rem=l.min*60-u[l.host];if(rem===60)N.toast(`1 minute left on ${l.host} today`);
+  if(rem<=0){e.paused=t.url;N.nav(t.id,'stop');showCurrent();N.toast(`Daily limit reached for ${l.host}`)}
+  if(u[l.host]%10===0)save();if(sheetKind==='focus'&&u[l.host]%5===0)refreshSheet()}}}
+setInterval(tick,1000);
+
+/* ---------- boot ---------- */
+$('#ueIcon').innerHTML=ic('search',18);
+applyTheme();pushBlocking();applyCompact();
+if(S.week.k!==weekKey())S.week={k:weekKey(),n:0};
+showCurrent();
+if(!S.seenHelp)openHelp();
+N.ready();
+})();
+</script>
+</body>
+</html>

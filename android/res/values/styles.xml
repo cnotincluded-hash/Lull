@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <style name="AppTheme" parent="android:Theme.Material.Light.NoActionBar">
+    <item name="android:windowBackground">@color/bg</item>
+    <item name="android:statusBarColor">#F3F3F1</item>
+    <item name="android:navigationBarColor">#F3F3F1</item>
+    <item name="android:windowLightStatusBar">true</item>
+  </style>
+  <style name="PrivateTheme" parent="android:Theme.Material.NoActionBar">
+    <item name="android:windowBackground">@color/priv_bg</item>
+    <item name="android:statusBarColor">#17141F</item>
+    <item name="android:navigationBarColor">#17141F</item>
+    <item name="android:windowLightStatusBar">false</item>
+  </style>
+</resources>

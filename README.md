@@ -37,6 +37,7 @@ The **Build desktop installers** workflow builds `Lull-<version>-setup.exe` (Win
 | `preload/` | Bridges for the interface and mini player; `page.js` runs in every page (YouTube script, cookie banners, Glance) |
 | `assets/` | `yt.js`, reader view (Mozilla Readability), icon |
 
-## Android
+## Android: `android/`
 
-The Android app (WebView) is a separate project with its own source zip and signing key; the key never goes in this public repo.
+WebView app for Android 8.0+. Build it on Ubuntu or Debian with `LULL_KS_PASS=yourpassword ./build.sh` (see `android/README.md`).
+The signing keystore is not in this repo and never should be: updates only install over the existing app if they're signed with the same key, so keep your copy safe.
