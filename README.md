@@ -21,7 +21,7 @@ Electron (Chromium) app.
 
 ### Installers
 
-The **Build desktop installers** workflow builds `Lull-<version>-setup.exe` (Windows x64) and `Lull-<version>-universal.dmg` (Mac, Intel and Apple silicon, macOS 12+) into a draft GitHub release. Run it from the Actions tab, or push a tag like `v1.0.0`. The apps aren't code-signed, so Windows SmartScreen and macOS Gatekeeper warn on first launch (see the release notes for the steps).
+The **Build desktop installers** workflow builds `Lull-<version>-setup.exe` (Windows x64) and `Lull-<version>-universal.dmg` (Mac, Intel and Apple silicon, macOS 12+) into a GitHub release. Pushing a tag like `v1.0.0` publishes the release; running it from the Actions tab makes a draft. The apps aren't code-signed, so Windows SmartScreen and macOS Gatekeeper warn on first launch (see the release notes for the steps).
 
 ### Layout
 
